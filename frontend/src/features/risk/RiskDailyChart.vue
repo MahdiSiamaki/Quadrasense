@@ -6,6 +6,7 @@ import { DataZoomComponent, GridComponent, LegendComponent, MarkAreaComponent, T
 import { CanvasRenderer } from 'echarts/renderers'
 import { CHECK_LABELS, type RiskChangeDay } from '@/api/risk'
 import { fillCalendar, isMissing } from '@/lib/calendar'
+import { edgeDateLabels } from '@/lib/chart-axis'
 import { chartColor, withAlpha } from '@/lib/chart-colors'
 import { feedQualityMarkArea, feedQualityTooltip } from '@/lib/feed-quality-bands'
 import { formatCompact, formatFull } from '@/lib/format'
@@ -114,7 +115,7 @@ function render() {
         type: 'category',
         data: dates,
         // The first and last dates align to the plot's edges: centred on the end ticks they ran off the canvas.
-        axisLabel: { color: muted, fontSize: 10, hideOverlap: true, alignMinLabel: 'left', alignMaxLabel: 'right' },
+        axisLabel: { color: muted, fontSize: 10, ...edgeDateLabels },
         axisLine: { lineStyle: { color: border } },
       },
       yAxis: {

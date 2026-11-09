@@ -6,6 +6,7 @@ import { GridComponent, TooltipComponent, MarkAreaComponent } from 'echarts/comp
 import { CanvasRenderer } from 'echarts/renderers'
 import { formatCompact, formatDate, formatFull, formatMonth } from '@/lib/format'
 import { useChartRevision } from '@/lib/appearance'
+import { edgeDateLabels } from '@/lib/chart-axis'
 import { reportInitOptions, useReportMode } from '@/lib/report-mode'
 import { setThemedOption } from '@/lib/chart-theme'
 import { chartColor } from '@/lib/chart-colors'
@@ -122,14 +123,7 @@ function render() {
         type: 'category',
         data: keys,
         // The first and last labels align to the plot's edges: centred on the end ticks they ran off the canvas.
-        axisLabel: {
-          color: muted,
-          fontSize: 10,
-          hideOverlap: true,
-          alignMinLabel: 'left',
-          alignMaxLabel: 'right',
-          formatter: axisLabel,
-        },
+        axisLabel: { color: muted, fontSize: 10, ...edgeDateLabels, formatter: axisLabel },
         axisLine: { lineStyle: { color: border } },
       },
       yAxis: {

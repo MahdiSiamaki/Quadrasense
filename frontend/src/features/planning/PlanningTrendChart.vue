@@ -7,6 +7,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { formatCompact, formatFull } from '@/lib/format'
 import { useChartRevision } from '@/lib/appearance'
 import { setThemedOption } from '@/lib/chart-theme'
+import { edgeDateLabels } from '@/lib/chart-axis'
 import { chartColor } from '@/lib/chart-colors'
 import { tooltipBounds } from '@/lib/chart-tooltip'
 import { reportInitOptions, useReportMode } from '@/lib/report-mode'
@@ -70,7 +71,7 @@ function render() {
       xAxis: {
         type: 'category',
         data: props.points.map((p) => p.label),
-        axisLabel: { color: muted, fontSize: 10, hideOverlap: true, alignMinLabel: 'left', alignMaxLabel: 'right' },
+        axisLabel: { color: muted, fontSize: 10, ...edgeDateLabels },
         axisLine: { lineStyle: { color: border } },
       },
       yAxis: {

@@ -6,6 +6,7 @@ import { DataZoomComponent, GridComponent, LegendComponent, MarkAreaComponent, M
 import { CanvasRenderer } from 'echarts/renderers'
 import { CHECK_LABELS, flaggedDays, type FeedQualityCheck, type FeedQualityDay, type FeedQualityResponse } from '@/api/quality'
 import { fillCalendar, isMissing } from '@/lib/calendar'
+import { edgeDateLabels } from '@/lib/chart-axis'
 import { chartColor } from '@/lib/chart-colors'
 import { tooltipBounds } from '@/lib/chart-tooltip'
 import { leaveWheelToPage } from '@/lib/chart-zoom'
@@ -101,7 +102,7 @@ function render() {
       xAxis: {
         type: 'category',
         data: dates,
-        axisLabel: { color: muted, fontSize: 10, hideOverlap: true, alignMinLabel: 'left', alignMaxLabel: 'right' },
+        axisLabel: { color: muted, fontSize: 10, ...edgeDateLabels },
         axisLine: { lineStyle: { color: border } },
       },
       yAxis: {

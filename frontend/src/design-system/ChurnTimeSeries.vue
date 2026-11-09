@@ -14,6 +14,7 @@ import { formatCompact, formatFull } from '@/lib/format'
 import { useChartRevision } from '@/lib/appearance'
 import { reportInitOptions, useReportMode } from '@/lib/report-mode'
 import { setThemedOption } from '@/lib/chart-theme'
+import { edgeDateLabels } from '@/lib/chart-axis'
 import { chartColor } from '@/lib/chart-colors'
 import { fillCalendar, isMissing } from '@/lib/calendar'
 import { feedQualityMarkArea, feedQualityTooltip } from '@/lib/feed-quality-bands'
@@ -138,7 +139,7 @@ function render() {
         type: 'category',
         data: days.map((d) => d.date),
         // The first and last dates align to the plot's edges: centred on the end ticks they ran off the canvas.
-        axisLabel: { color: muted, fontSize: 10, hideOverlap: true, alignMinLabel: 'left', alignMaxLabel: 'right' },
+        axisLabel: { color: muted, fontSize: 10, ...edgeDateLabels },
         axisLine: { lineStyle: { color: border } },
       },
       yAxis: {
