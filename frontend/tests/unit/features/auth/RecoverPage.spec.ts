@@ -40,6 +40,14 @@ describe('asking for a code', () => {
     expect(wrapper.text()).toContain('An administrator can reset your password')
   })
 
+  it('says so when the server cannot be asked, rather than sitting there', async () => {
+    fakeApi({ [OPTIONS_PATH]: { status: 500 } })
+    const { wrapper } = await mountPage(RecoverPage, '/recover')
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('Could not reach the server')
+    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined()
+  })
+
   it('offers a choice only when there is one', async () => {
     fakeApi({ [OPTIONS_PATH]: { status: 200, body: OPTIONS } })
     const both = await mountPage(RecoverPage, '/recover')
