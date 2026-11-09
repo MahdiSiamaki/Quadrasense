@@ -471,15 +471,19 @@ public sealed class ExplorerEndpointTests : IClassFixture<WebApplicationFactory<
                 ["-cmd", null],
                 ["@SUM(A1)", true],
                 ["Redmi Note 8, \"Pro\"", 3L],
+                ["-2", -23.2095],
             ]));
 
+        // A number is written as itself, so a spreadsheet can sum it; text that only looks like one is
+        // still neutralised.
         Assert.Equal(
             "﻿Model,Count\r\n"
             + "\"'=HYPERLINK(\"\"http://x\"\")\",1\r\n"
-            + "'+1,'-2\r\n"
+            + "'+1,-2\r\n"
             + "'-cmd,\r\n"
             + "'@SUM(A1),true\r\n"
-            + "\"Redmi Note 8, \"\"Pro\"\"\",3\r\n",
+            + "\"Redmi Note 8, \"\"Pro\"\"\",3\r\n"
+            + "'-2,-23.2095\r\n",
             csv);
     }
 

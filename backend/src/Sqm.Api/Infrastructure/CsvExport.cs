@@ -31,7 +31,7 @@ public static class CsvExport
         ArgumentNullException.ThrowIfNull(rows);
 
         var text = new StringBuilder();
-        AppendLine(text, headers);
+        AppendHeader(text, headers);
 
         foreach (var row in rows)
         {
@@ -43,15 +43,39 @@ public static class CsvExport
         return [.. bom, .. body];
     }
 
+    /// <summary>
+    /// A cell as text. A number is written as itself: it is not a formula, and neutralising <c>-1234</c>
+    /// made it <c>'-1234</c>, which a spreadsheet reads as text and will not sum (the owner's decision,
+    /// 2026-11-09). Every other value goes through <see cref="Field"/>.
+    /// </summary>
     private static string Format(object? value) => value switch
     {
         null => string.Empty,
         bool b => b ? "true" : "false",
-        IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
-        _ => value.ToString() ?? string.Empty,
+        sbyte or byte or short or ushort or int or uint or long or ulong or float or double or decimal =>
+            ((IFormattable)value).ToString(null, CultureInfo.InvariantCulture),
+        IFormattable f => Field(f.ToString(null, CultureInfo.InvariantCulture)),
+        _ => Field(value.ToString() ?? string.Empty),
     };
 
     private static void AppendLine(StringBuilder text, IEnumerable<string> fields)
+    {
+        var first = true;
+        foreach (var field in fields)
+        {
+            if (!first)
+            {
+                text.Append(',');
+            }
+
+            text.Append(field);
+            first = false;
+        }
+
+        text.Append("\r\n");
+    }
+
+    private static void AppendHeader(StringBuilder text, IEnumerable<string> fields)
     {
         var first = true;
         foreach (var field in fields)
