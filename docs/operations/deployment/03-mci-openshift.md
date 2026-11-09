@@ -94,11 +94,12 @@ NetworkPolicies. Nothing else is allowed.
 | From | To | Port | Why |
 |---|---|---|---|
 | Users (internal network) | `web` | 443 (80 only redirects) | The application |
+| Lodestone (IEH); Tessera (PDC) where registered directly | `web` | 443 | The integration API, `/api/integration/v1` (ADR-024): bearer tokens, no session. PI opens no connection back - Lodestone pulls PI's events |
 | `web` | `api` | 8080 | `/api/` |
 | `api` | `clickhouse` | 8123 (HTTP) | Analytics reads; mart refresh |
 | `api` | `postgres` | 5432 | Sessions, users, audit, jobs, dashboards |
 | `worker` | `clickhouse` | 8123 | Imports, marts, risk snapshot |
-| `worker` | `postgres` | 5432 | Jobs, TAC versions |
+| `worker` | `postgres` | 5432 | Jobs, TAC versions, the integration feed's outbox |
 | `migrate` | `clickhouse`, `postgres` | 8123, 5432 | Schema |
 | `grants` | `postgres` | 5432 | Roles and grants |
 | Platform monitoring | every pod | metrics port (once one exists) | Section 6 |
