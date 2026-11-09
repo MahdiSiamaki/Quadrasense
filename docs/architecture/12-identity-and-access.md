@@ -175,6 +175,7 @@ ADR-022 has the reasoning; this is what exists.
 |---|---|
 | A one-time code | Six digits, ten minutes, void after five failures, one use, Argon2id at rest (`auth.one_time_code`, `Auth:Recovery`) |
 | Sent to | A **proved** contact only: `email_verified_at`, `phone_verified_at`. Proving one takes the password and a code; changing it clears the proof |
+| Sent by | E-mail over SMTP; SMS over SMPP 3.4 to an SMSC (MCI's), or to an HTTP gateway. Each is off until configured |
 | Limits | Six requests a minute per address; one code a minute and five an hour per account |
 | `POST auth/recovery/start` | Looks at no account. Queues the request and answers 202 with no body, for everyone |
 | `POST auth/recovery/complete` | One hash on every failing path, one answer for all of them. Success sets the password, lifts any lockout, ends every session and tells the owner. It signs nobody in |

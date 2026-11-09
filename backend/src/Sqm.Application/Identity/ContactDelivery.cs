@@ -12,8 +12,14 @@ public enum ContactChannel
     Sms,
 }
 
-/// <summary>What is sent. SMS uses the text alone.</summary>
-public sealed record OutgoingMessage(string Subject, string Text);
+/// <summary>What is sent.</summary>
+/// <param name="Subject">An e-mail's subject.</param>
+/// <param name="Text">An e-mail's body, and a text message's when there is no brief.</param>
+/// <param name="Brief">
+/// The text message: one part, 160 characters, because every part is paid for and a code split in
+/// two arrives in the wrong order on some phones.
+/// </param>
+public sealed record OutgoingMessage(string Subject, string Text, string? Brief = null);
 
 /// <summary>Sends a message to a contact.</summary>
 /// <remarks>
@@ -79,7 +85,9 @@ public static class AccountMessages
         $"{Product} password reset code",
         $"{code} is your {Product} password reset code for {username}. "
         + $"It expires in {Minutes(lifetime)} minutes. If you did not ask for it, ignore this "
-        + "message: your password has not changed.");
+        + "message: your password has not changed.",
+        $"{code} is your {Product} password reset code for {username}. "
+        + $"It expires in {Minutes(lifetime)} minutes.");
 
     /// <summary>A code to prove a contact.</summary>
     public static OutgoingMessage VerifyCode(string code, TimeSpan lifetime) => new(
@@ -92,15 +100,18 @@ public static class AccountMessages
         AccountNotice.PasswordReset => new(
             $"Your {Product} password was changed",
             $"The password of {Product} account {username} was just reset and every device was "
-            + "signed out. If this was not you, contact your administrator now."),
+            + "signed out. If this was not you, contact your administrator now.",
+            $"{Product}: the password of {username} was reset. Not you? Tell your administrator now."),
         AccountNotice.TwoStepOn => new(
             $"Two-step sign-in is on for your {Product} account",
             $"Two-step sign-in was turned on for {Product} account {username}. If this was not "
-            + "you, contact your administrator now."),
+            + "you, contact your administrator now.",
+            $"{Product}: two-step sign-in is on for {username}. Not you? Tell your administrator now."),
         AccountNotice.TwoStepOff => new(
             $"Two-step sign-in is off for your {Product} account",
             $"Two-step sign-in was turned off for {Product} account {username}. If this was not "
-            + "you, contact your administrator now."),
+            + "you, contact your administrator now.",
+            $"{Product}: two-step sign-in is off for {username}. Not you? Tell your administrator now."),
         _ => throw new ArgumentOutOfRangeException(nameof(notice), notice, null),
     };
 

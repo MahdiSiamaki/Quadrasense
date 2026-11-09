@@ -30,9 +30,11 @@ reasoning.
 |---|---|---|
 | Two-step sign-in | `Auth:TwoStep:SecretKey`: `openssl rand -base64 32`, kept apart from the database's backups | People turn it on from their profile; a role can demand it |
 | Recovery by e-mail | `Auth:Delivery:Email:Host` and `:From`, with `:Port`, `:Security`, `:Username`, `:Password` as the server needs | Each person proves their address from their profile |
-| Recovery by SMS | `Auth:Delivery:Sms:Url`, and `:Method`, `:ContentType`, `:Body`, `:Headers:*`, `:SuccessContains` as the gateway needs | Each person proves their number from their profile |
+| Recovery by SMS, through an SMSC (MCI's) | `Auth:Delivery:Smpp:Host`, `:SystemId`, `:SourceAddress`, with `:Port`, `:Password`, `:SystemType`, the TON and NPI of sender and destination, `:DestinationFormat` and `:DataCoding` as its operators give them | Each person proves their number from their profile |
+| Recovery by SMS, through an HTTP gateway | `Auth:Delivery:Sms:Url`, and `:Method`, `:ContentType`, `:Body`, `:Headers:*`, `:SuccessContains` as the gateway needs. Not used when SMPP is set | The same |
 
-In `deploy/compose` the same settings are `SQM_TWO_STEP_KEY`, `SQM_SMTP_*` and `SQM_SMS_*` in `.env`.
+In `deploy/compose` the same settings are `SQM_TWO_STEP_KEY`, `SQM_SMTP_*`, `SQM_SMPP_*` and
+`SQM_SMS_*` in `.env`.
 
 **On a development machine** `appsettings.Development.json` turns everything on without a mail server:
 `Auth:Delivery:WriteToLog` writes each message, code included, to the API's console, and a key for that

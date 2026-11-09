@@ -13,7 +13,7 @@ namespace Sqm.Infrastructure.Identity.Delivery;
 /// See <see cref="SmsGatewayOptions"/>. A failure says only what came back: never the text, which
 /// holds the code, and never the URL, which may hold a key.
 /// </remarks>
-internal sealed class HttpSmsSender : IDisposable
+internal sealed class HttpSmsSender : ISmsSender
 {
     private readonly SmsGatewayOptions _options;
     private readonly HttpClient _client;

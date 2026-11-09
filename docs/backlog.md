@@ -91,6 +91,6 @@ decisions some of these wait on are numbered in `docs/operations/deployment/READ
 | LDAP / Active Directory | The seam exists (`IPasswordAuthenticator`, `provider` / `external_id`) |
 | OIDC | A callback endpoint mapping a subject claim onto `external_id` |
 | A notice to the old contact when one changes | A hijacked session can change a contact, though it cannot prove the new one without the password. Telling the old address is the standard extra. Small: the update already knows both values (ADR-022) |
-| An SMPP sender | `IContactDelivery` takes one if MCI's gateway speaks SMPP rather than HTTP. Waits on knowing the gateway |
+| SMPP over TLS, and delivery receipts | The SMPP sender speaks plain TCP, as SMPP inside a data centre usually is, and asks for no receipt. Either is small to add if MCI's gateway requires it | What MCI's SMSC operators say |
 | Rotating the two-step key | One key today; a key id on each secret would allow a second during a change. Nothing needs it yet. Small |
 | Captcha after three failures | Decided 2026-11-09: built for the MCI release; see Deployment above |
