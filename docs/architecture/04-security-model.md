@@ -161,7 +161,7 @@ File upload is the largest attack surface, because it accepts bulk data from out
 | Path traversal | Generated storage names only; the client-supplied filename is stored as metadata and never used as a path |
 | Zip bomb / oversized file | Hard byte cap, enforced streaming (never buffered whole in memory) |
 | Content-type spoofing | Extension and declared MIME are advisory; the file is validated by **parsing** it against the expected schema |
-| Malicious CSV content | Values are never evaluated; CSV-injection prefixes (`=`, `+`, `-`, `@`) are neutralised on export |
+| Malicious CSV content | Values are never evaluated; CSV-injection prefixes (`=`, `+`, `-`, `@`) are neutralised on export, in every text cell; a number is written as itself (2026-11-09) |
 | Resource exhaustion | Uploads are queued as background jobs with concurrency limits, never processed in the request thread |
 | Duplicate / replayed file | SHA-256 content hash checked before any processing |
 | Storage exhaustion | Quota per batch and overall, with alerting |
