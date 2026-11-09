@@ -161,6 +161,24 @@ public sealed class PermissionPolicyProvider : IAuthorizationPolicyProvider
                 Build(code, allowDuringForcedPasswordChange: false));
         }
 
+        // The integration API's policies (ADR-024): the bearer scheme only, never the session.
+        if (string.Equals(policyName, IntegrationPolicies.AnyClient, StringComparison.Ordinal))
+        {
+            return Task.FromResult<AuthorizationPolicy?>(IntegrationPolicies.Build(null));
+        }
+
+        if (policyName is not null && policyName.StartsWith(IntegrationPolicies.Prefix, StringComparison.Ordinal))
+        {
+            var scope = policyName[IntegrationPolicies.Prefix.Length..];
+            if (!Sqm.Application.Integration.IntegrationScopes.All.Contains(scope))
+            {
+                throw new InvalidOperationException(
+                    $"'{scope}' is not a known integration scope. Add it to Sqm.Application.Integration.IntegrationScopes.");
+            }
+
+            return Task.FromResult<AuthorizationPolicy?>(IntegrationPolicies.Build(scope));
+        }
+
         return Task.FromResult<AuthorizationPolicy?>(null);
     }
 
@@ -233,6 +251,33 @@ public sealed class AuditingAuthorizationResultHandler : IAuthorizationMiddlewar
                     ["requiredPermissions"] = codes,
                     ["held"] = codes.Where(c => session.User.Can(c!)).ToArray(),
                     ["mustChangePassword"] = session.User.MustChangePassword,
+                }), context.RequestAborted).ConfigureAwait(false);
+        }
+
+        // A client refused for want of a scope (ADR-024): the same entry, naming the client and the scopes.
+        if (authorizeResult.Forbidden && CurrentClient.Find(context) is { } client)
+        {
+            var scopes = policy?.Requirements
+                .OfType<ScopeRequirement>()
+                .Select(r => r.Scope)
+                .Where(s => s is not null)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray() ?? [];
+            await _audit.WriteAsync(new AuditEntry(
+                ActorName: client.Actor,
+                Action: scopes.Length == 0 ? "request.forbidden" : string.Join(' ', scopes),
+                Category: AuditCategory.System,
+                Outcome: AuditOutcome.Denied,
+                TargetType: "endpoint",
+                TargetId: context.Request.Path.Value,
+                TargetName: context.Request.Method,
+                Ip: context.Connection.RemoteIpAddress?.ToString(),
+                UserAgent: context.Request.Headers.UserAgent.ToString(),
+                CorrelationId: context.TraceIdentifier,
+                Detail: new Dictionary<string, object?>
+                {
+                    ["requiredScopes"] = scopes,
+                    ["held"] = client.Scopes.Order(StringComparer.Ordinal).ToArray(),
                 }), context.RequestAborted).ConfigureAwait(false);
         }
 

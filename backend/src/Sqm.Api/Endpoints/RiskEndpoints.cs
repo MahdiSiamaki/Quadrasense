@@ -252,13 +252,40 @@ public static class RiskEndpoints
                 detail: $"The risk measures of a {KindName(unit)} need the \"{permission}\" permission.");
         }
 
+        var (response, notReady, runId, linkedCount) = await AssessAsync(
+            unit, parsed.Digits, reader, quality, qualityOptions, riskOptions, ct).ConfigureAwait(false);
+        if (response is null)
+        {
+            return Unavailable(notReady);
+        }
+
+        detail["stored"] = response.Stored;
+        detail["level"] = response.Level;
+        detail["pattern"] = response.Pattern;
+        detail["linked"] = linkedCount;
+        detail["ruleSetVersion"] = response.RuleSetVersion;
+        detail["runId"] = runId;
+        await audit.WriteAsync(EntityEntry(user, http, "risk.entity", AuditOutcome.Success, detail), ct).ConfigureAwait(false);
+
+        return Results.Ok(response);
+    }
+
+    /// <summary>
+    /// One number's, SIM's or handset's risk measures and the evidence level they reach, as the entity route
+    /// answers them; null with the reason when the snapshot is not ready. Shared with the integration API's
+    /// facts (ADR-024), so that Tessera reads exactly what a person sees.
+    /// </summary>
+    internal static async Task<(RiskEntityResponse? Response, string? NotReady, ulong? RunId, int Linked)> AssessAsync(
+        RiskFamily unit, string digits, IRiskReader reader, IFeedQualityReader quality, IOptions<FeedQualityOptions> qualityOptions,
+        IOptionsMonitor<RiskOptions> riskOptions, CancellationToken ct)
+    {
         var context = await ContextAsync(reader, quality, qualityOptions, riskOptions, ct).ConfigureAwait(false);
         if (context.NotReady is not null || context.State.Run is not { } run)
         {
-            return Unavailable(context.NotReady);
+            return (null, context.NotReady, null, 0);
         }
 
-        var stored =await reader.GetEntityAsync(run, unit, parsed.Digits, ct).ConfigureAwait(false);
+        var stored = await reader.GetEntityAsync(run, unit, digits, ct).ConfigureAwait(false);
         var list = RiskEvaluation.ListOf(RiskRules.Catalogue.First(s => s.Family == unit).Rule);
         var columns = Columns(list);
 
@@ -269,7 +296,7 @@ public static class RiskEndpoints
         var level = assessment?.Level ?? RiskLevel.Observation;
 
         // The pattern: this entity with those bound to it in the window. Counted, never named.
-        var linked = (await reader.GetLinkedAsync(run, unit, parsed.Digits, ct).ConfigureAwait(false))
+        var linked = (await reader.GetLinkedAsync(run, unit, digits, ct).ConfigureAwait(false))
             .Select(e => (e.Family, Judge(e).Level))
             .ToList();
         var pattern = RiskRules.Pattern([(unit, level), .. linked]);
@@ -283,15 +310,7 @@ public static class RiskEndpoints
             [.. linked.GroupBy(l => l.Family).OrderBy(g => g.Key).Select(g => new RiskLinkedInfo(
                 g.Key.ToString(), g.Count(), g.Count(l => l.Level >= RiskLevel.RiskSignal), g.Count(l => l.Level == RiskLevel.Anomaly)))]);
 
-        detail["stored"] = response.Stored;
-        detail["level"] = response.Level;
-        detail["pattern"] = response.Pattern;
-        detail["linked"] = linked.Count;
-        detail["ruleSetVersion"] = context.Settings.Version;
-        detail["runId"] = run.RunId;
-        await audit.WriteAsync(EntityEntry(user, http, "risk.entity", AuditOutcome.Success, detail), ct).ConfigureAwait(false);
-
-        return Results.Ok(response);
+        return (response, null, run.RunId, linked.Count);
     }
 
     // ------------------------------------------------------------------ shared
