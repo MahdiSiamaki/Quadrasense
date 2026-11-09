@@ -116,6 +116,18 @@ public sealed class DashboardWidgetDataLoaderTests
         Assert.Equal(["Galaxy A54", "iPhone 13", "Redmi Note 8"], result.Table!.Rows.Select(r => (string)r[0]!));
     }
 
+    [Theory]
+    [InlineData("vendorCanonical", "Vendor")]
+    [InlineData("marketingName", "Model")]
+    [InlineData("deviceType", "Device type")]
+    public async Task A_top_lists_first_column_is_headed_as_the_card_heads_it_not_with_its_config_key(string dimension, string heading)
+    {
+        var loader = Loader(top: [new("Samsung", 30, 30)]);
+        var result = await LoadAsync(loader, "device.top", $$$"""{"dimension":"{{{dimension}}}","limit":10}""");
+
+        Assert.Equal(heading, result.Table!.Headers[0]);
+    }
+
     [Fact]
     public async Task Period_comparison_writes_only_the_change_the_card_shows_one_cell_per_heading()
     {

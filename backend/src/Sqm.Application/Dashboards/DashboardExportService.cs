@@ -125,6 +125,7 @@ public sealed class DashboardExportService
         }
 
         var (name, lens, loaded) = prepared.Value!.Value;
+        var view = DashboardLensResolver.View(prepared.Defaults!, lens);
 
         // One widget asked for and refused: say so, rather than send a file with nothing in it.
         if (loaded.Count == 1 && loaded[0].Result.Status != "ok")
@@ -152,14 +153,20 @@ public sealed class DashboardExportService
 
         var scopes = string.Join(",", parts.Where(p => p.Table is not null).Select(p => p.Table!.Scope).Distinct().Order(StringComparer.Ordinal));
         await AuditAsync(user, context, request.DashboardId, name, "csv", loaded, scopes, ct).ConfigureAwait(false);
-        return new(DashboardOutcome.Ok, new DashboardCsvExport(name ?? request.Name ?? "Dashboard", _clock.GetUtcNow(), lens, parts));
+        // about.txt states the view the rows were read under - the defaults with the URL on top - since a
+        // file that leaves the system cannot point back at "the dashboard's defaults".
+        return new(DashboardOutcome.Ok, new DashboardCsvExport(name ?? request.Name ?? "Dashboard", _clock.GetUtcNow(), view, parts));
     }
 
     private sealed record Loaded(ValidatedWidget Widget, DashboardLens Effective, WidgetDataResult Result);
 
     private sealed record Refusal(DashboardOutcome Outcome, IReadOnlyList<DefinitionError>? Errors, string? Message);
 
-    private sealed record Prepared((string? Name, DashboardLens Lens, IReadOnlyList<Loaded> Widgets)? Value, Refusal? Refusal);
+    private sealed record Prepared((string? Name, DashboardLens Lens, IReadOnlyList<Loaded> Widgets)? Value, Refusal? Refusal)
+    {
+        /// <summary>The definition's saved defaults, when it was valid.</summary>
+        public DashboardLens? Defaults { get; init; }
+    }
 
     private async Task<Prepared> PrepareAsync(
         AuthenticatedUser user, long? dashboardId, System.Text.Json.JsonElement definition, DashboardLens? url,
@@ -235,7 +242,7 @@ public sealed class DashboardExportService
             loaded.Add(new Loaded(widget, effective, result));
         }
 
-        return new((name, lens, loaded), null);
+        return new((name, lens, loaded), null) { Defaults = check.Definition.Defaults };
     }
 
     private Task AuditAsync(

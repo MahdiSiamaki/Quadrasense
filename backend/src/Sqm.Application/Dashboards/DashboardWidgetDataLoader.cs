@@ -209,7 +209,7 @@ public sealed partial class DashboardWidgetDataLoader : IWidgetDataLoader
 
         return Done(
             Data(("rows", rows)), null, Notes(lens),
-            Table([c.Str("dimension"), Unit(lens), "Percent"], [.. ordered.Select(r => Row(r.Key, r.Count, r.Percent))], TopN,
+            Table([DimensionLabel(c.Str("dimension")), Unit(lens), "Percent"], [.. ordered.Select(r => Row(r.Key, r.Count, r.Percent))], TopN,
                 $"The top {limit} by {Unit(lens)}; the rest are not in this file."));
     }
 
@@ -223,7 +223,7 @@ public sealed partial class DashboardWidgetDataLoader : IWidgetDataLoader
 
         return Done(
             Data(("rows", rows)), null, Notes(lens),
-            Table([c.Str("dimension"), Unit(lens), "Percent"], shown, capped ? TopN : Full,
+            Table([DimensionLabel(c.Str("dimension")), Unit(lens), "Percent"], shown, capped ? TopN : Full,
                 capped ? $"The top {limit} of {rows.Count}." : "Every value."));
     }
 
@@ -526,6 +526,21 @@ public sealed partial class DashboardWidgetDataLoader : IWidgetDataLoader
         "subscribers" => "Subscribers (estimated)",
         "handsets" => "Handsets (estimated)",
         _ => "Bindings",
+    };
+
+    /// <summary>
+    /// A dimension's column heading as the card heads it: the config key (<c>deviceType</c>) is the widget's
+    /// vocabulary, not the reader's.
+    /// </summary>
+    private static string DimensionLabel(string dimension) => dimension switch
+    {
+        "vendorCanonical" => "Vendor",
+        "manufacturer" => "Manufacturer (as GSMA names it)",
+        "marketingName" => "Model",
+        "deviceType" => "Device type",
+        "operatingSystem" => "Operating system",
+        "tac" => "TAC",
+        _ => dimension,
     };
 
     private static IReadOnlyList<string> Notes(DashboardLens lens) =>

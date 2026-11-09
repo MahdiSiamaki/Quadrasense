@@ -108,7 +108,7 @@ public static class DashboardCsvWriter
 
         if (l.Range is { } r)
         {
-            parts.Add($"range {r}");
+            parts.Add(RangeText(r));
         }
 
         if (l.Vendor is { } v)
@@ -131,12 +131,29 @@ public static class DashboardCsvWriter
             parts.Add($"TAC {t}");
         }
 
-        if (l.IncludeUnknownDevice is false)
+        if (l.IncludeUnknownDevice is { } unknown)
         {
-            parts.Add("unknown devices excluded");
+            parts.Add(unknown ? "unknown devices included" : "unknown devices excluded");
         }
 
         return parts.Count == 0 ? "the dashboard's defaults" : string.Join(", ", parts);
+    }
+
+    /// <summary>A range as the dashboard's header words it, not as its token: "the last 90 days of data", not "last90".</summary>
+    public static string RangeText(string range)
+    {
+        if (range == "all")
+        {
+            return "every available day";
+        }
+
+        if (range.StartsWith("last", StringComparison.Ordinal) && int.TryParse(range.AsSpan(4), NumberStyles.None, CultureInfo.InvariantCulture, out var days))
+        {
+            return $"the last {days} days of data";
+        }
+
+        var dots = range.IndexOf("..", StringComparison.Ordinal);
+        return dots > 0 ? $"{range[..dots]} to {range[(dots + 2)..]}" : $"range {range}";
     }
 
     /// <summary>ASCII letters, digits and dashes: safe in a file name on every system.</summary>

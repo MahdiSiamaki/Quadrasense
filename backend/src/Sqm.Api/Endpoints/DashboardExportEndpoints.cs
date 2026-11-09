@@ -23,6 +23,12 @@ public static partial class DashboardExportEndpoints
     /// <summary>The header naming a CSV file's scope: visible, topN or full.</summary>
     public const string ScopeHeader = "X-Export-Scope";
 
+    /// <summary>The headers saying how many of the widgets asked for are in the file, so the dialog never claims one per widget when some were left out.</summary>
+    public const string IncludedHeader = "X-Export-Included";
+
+    /// <summary>How many widgets were asked for.</summary>
+    public const string RequestedHeader = "X-Export-Requested";
+
     /// <summary>Registers the export routes.</summary>
     public static IEndpointRouteBuilder MapDashboardExportEndpoints(this IEndpointRouteBuilder app)
     {
@@ -58,6 +64,8 @@ public static partial class DashboardExportEndpoints
         {
             var file = DashboardCsvWriter.Write(export);
             http.Response.Headers[ScopeHeader] = file.Scope;
+            http.Response.Headers[IncludedHeader] = export.Parts.Count(p => p.Table is not null).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            http.Response.Headers[RequestedHeader] = export.Parts.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
             return Results.File(file.Content, file.ContentType, file.FileName);
         });
     }

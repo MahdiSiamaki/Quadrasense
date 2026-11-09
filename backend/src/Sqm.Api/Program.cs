@@ -340,7 +340,7 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .AllowAnyMethod()
     .AllowCredentials()
     .WithExposedHeaders(
-        "Content-Disposition", "X-Export-Scope", "X-Correlation-Id",
+        "Content-Disposition", "X-Export-Scope", "X-Export-Included", "X-Export-Requested", "X-Correlation-Id",
         // The tus protocol's (ADR-018): where an upload lives, and how much of it has arrived.
         "Location", "Upload-Offset", "Upload-Length", "Upload-Expires",
         "Tus-Resumable", "Tus-Version", "Tus-Max-Size", "Tus-Extension")));
