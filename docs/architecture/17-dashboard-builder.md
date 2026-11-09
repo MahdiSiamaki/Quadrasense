@@ -199,6 +199,10 @@ Measured or observed on 2026-10-09; each says what was and was not checked.
   > product writes. Text is still neutralised, including text that only looks like a number.
 - **PNG on a very tall dashboard is not measured.** Pages over 6,500 px are split; the largest
   template has not been exported and timed.
+
+  > **SUPERSEDED (2026-11-09)**: measured. The tallest template, Data Operations & Quality, is one
+  > 2400 × 6870 px image in 2.5 s; the four templates take 1.5–2.6 s each. Pages are now cut where the
+  > cards really end, at most 7,000 CSS px (ADR-016, amendments of 2026-11-09).
 - **No end-to-end browser suite.** The project has no Playwright dependency; adding one downloads
   browsers. Component behaviour is covered by Vitest, the API by integration tests, and the layout
   is checked in the browser by measurement.

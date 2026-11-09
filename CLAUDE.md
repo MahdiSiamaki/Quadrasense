@@ -116,7 +116,7 @@ A person can change the theme, typeface, text size, density, accent, corners and
 (ADR-023). A new page follows if it uses the tokens; a new chart must set its option through
 `setThemedOption` and redraw on `useChartRevision`, and a test fails otherwise.
 
-Ten traps that have already cost time, all still live:
+Eleven traps that have already cost time, all still live:
 
 - **zrender cannot parse `oklch()`.** Passing a token straight to ECharts yields `undefined` and
   the series disappears on hover. Resolve through `frontend/src/lib/chart-colors.ts`.
@@ -151,6 +151,11 @@ Ten traps that have already cost time, all still live:
 - **ECharts' inside zoom cancels the wheel over the plot**, and `zoomOnMouseWheel: 'ctrl'` does not
   stop it: in 6.1 the controller cancels the event before it reads that option. A chart with an
   inside zoom calls `leaveWheelToPage` from `frontend/src/lib/chart-zoom.ts`.
+- **An export is a frozen copy, not a page.** html-to-image copies every box at the size it measured
+  and every canvas as drawn, and print never redraws a canvas: a table that fitted its box exactly
+  drew a scrollbar in the PNG, and a zoomed chart exported its last third (2026-11-09). A chart asks
+  for `useReportMode` (`tests/unit/design-system/reportMode.spec.ts` fails otherwise), and a widget
+  is checked in a real export - a PNG and a printed PDF - not on the dashboard. ADR-016 has the rest.
 
 The UI conventions these and the layout review settled are in
 `docs/architecture/16-ui-design-system.md`.
