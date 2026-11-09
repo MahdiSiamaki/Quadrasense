@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Sqm.Api.Integration;
 using Sqm.Application.Abstractions;
+using Sqm.Application.DataImport;
 using Sqm.Application.Identity;
 using Sqm.Application.Integration;
 using Sqm.Application.Risk;
@@ -109,6 +110,17 @@ public sealed class IntegrationApiTests : IClassFixture<WebApplicationFactory<Pr
                         [new DailyBindingChange(day, 250, Number, Sim, Imei, "35085748", true)],
                         new BindingChangeCursor(Number, Sim, Imei, 250))
                     : new BindingChangePage([new DailyBindingChange(day, 250, Number, OtherSim, OtherImei, "35326911", false)], null));
+            }));
+            // The status route reads each feed's freshness from PostgreSQL. Stubbed, so that no test here needs a
+            // database: the department's pipeline has none, and a route answering 500 there failed it once.
+            services.AddSingleton(TestStubs.Create<IImportJobRepository>((method, _) => method.Name switch
+            {
+                "GetFreshnessAsync" => Task.FromResult<IReadOnlyList<SourceFreshness>>(
+                [
+                    new SourceFreshness("SQM", new DateOnly(2026, 10, 31), DateTimeOffset.UtcNow, 9,
+                        [new DateOnly(2026, 5, 8), new DateOnly(2026, 5, 8), new DateOnly(2026, 5, 9)], 0),
+                ]),
+                _ => throw new NotSupportedException(method.Name),
             }));
             services.AddSingleton(TestStubs.Create<IRiskReader>((method, _) => method.Name switch
             {
@@ -258,6 +270,22 @@ public sealed class IntegrationApiTests : IClassFixture<WebApplicationFactory<Pr
 
         Assert.Equal(HttpStatusCode.Unauthorized, withSession.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, withToken.StatusCode);
+    }
+
+    [Fact]
+    public async Task The_status_names_the_client_its_scopes_and_how_fresh_each_feed_is()
+    {
+        var token = Token(IntegrationScopes.EventsRead, IntegrationScopes.InventoryRead);
+
+        using var response = await SendAsync(HttpMethod.Get, "/api/integration/v1/status", null, token);
+        var body = await JsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(("lodestone", "Ready", "2026-10-31"), (
+            body.GetProperty("client").GetString(), body.GetProperty("history").GetString(), body.GetProperty("dataThrough").GetString()));
+        Assert.Equal(new[] { "events.read", "inventory.read" }, body.GetProperty("scopes").EnumerateArray().Select(s => s.GetString()!).ToArray());
+        var source = body.GetProperty("sources")[0];
+        Assert.Equal(("SQM", 9, 2), (source.GetProperty("source").GetString(), source.GetProperty("daysBehind").GetInt32(), source.GetProperty("missingDays").GetInt32()));
     }
 
     [Fact]
