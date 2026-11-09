@@ -227,7 +227,7 @@ function describe(row: ChartRow): string {
           <!-- Still held: the bar runs to the end of the data, and says so. -->
           <span
             v-if="row.periods.some((p) => !p.end)"
-            class="absolute top-0 right-0 text-[0.625rem] leading-5 text-[var(--c-accent)]"
+            class="absolute top-0 right-0 text-[length:calc(0.625rem*var(--text-scale))] leading-5 text-[var(--c-accent)]"
             aria-hidden="true"
           >▶</span>
 

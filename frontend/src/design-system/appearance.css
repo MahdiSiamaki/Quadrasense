@@ -1,0 +1,209 @@
+/*
+  What a person can change about how the application looks (docs/adr/ADR-023).
+
+  Every setting is one attribute on <html>, set by public/theme-init.js before the first paint and
+  by lib/appearance.ts after it, and every attribute does its work here by changing a design token.
+  So nothing in a component knows about any of this: a page that uses the tokens follows.
+
+  This file is unlayered and comes after tokens.css. Tailwind's theme variables live in a layer, so
+  these win; the accent blocks repeat :root[data-theme='dark'] so that they outrank the dark palette.
+*/
+
+/* ------------------------------------------------------------------ text */
+
+:root[data-font='inter'] {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+:root[data-font='plex'] {
+  --font-sans:
+    'IBM Plex Sans Variable', ui-sans-serif, system-ui, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+:root[data-font='atkinson'] {
+  --font-sans:
+    'Atkinson Hyperlegible Next Variable', ui-sans-serif, system-ui, 'Segoe UI', Roboto, Arial,
+    sans-serif;
+}
+
+/*
+  Multiplies the whole type scale. The smallest step, 11px, stays above 10px on Small: below that
+  the axis labels and table meta stop being readable, which is the one thing this must not do.
+*/
+:root[data-text='small'] {
+  --text-scale: 0.93;
+}
+
+:root[data-text='large'] {
+  --text-scale: 1.08;
+}
+
+:root[data-text='larger'] {
+  --text-scale: 1.16;
+}
+
+/*
+  Weight moves the three steps the product uses together, so a heading stays heavier than the text
+  under it. Light stops at 350: thinner than that loses contrast on a dense table, whatever the
+  colour says.
+*/
+:root[data-weight='light'] {
+  --font-weight-body: 350;
+  --font-weight-medium: 450;
+  --font-weight-semibold: 550;
+}
+
+:root[data-weight='medium'] {
+  --font-weight-body: 450;
+  --font-weight-medium: 600;
+  --font-weight-semibold: 700;
+}
+
+/* Every line-height token is multiplied by this (tokens.css). */
+:root[data-leading='tight'] {
+  --leading-scale: 0.92;
+}
+
+:root[data-leading='relaxed'] {
+  --leading-scale: 1.15;
+}
+
+/* ---------------------------------------------------------------- density */
+
+/*
+  Spacing utilities are calc(var(--spacing) * n), so changing the variable on an element changes
+  every padding and gap inside it. Tables and forms take the setting; the page's own rhythm does not.
+  A field outside a form, such as a filter bar's, is listed so that it still matches one inside.
+*/
+:root[data-density='compact'] :is(table, form, input, select, textarea) {
+  --spacing: 0.2rem;
+}
+
+:root[data-density='comfortable'] :is(table, form, input, select, textarea) {
+  --spacing: 0.3rem;
+}
+
+/* ---------------------------------------------------------------- corners */
+
+:root[data-corners='square'] {
+  --radius-sm: 0.0625rem;
+  --radius-md: 0.125rem;
+  --radius-lg: 0.1875rem;
+  --radius-xl: 0.25rem;
+}
+
+:root[data-corners='round'] {
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+/* ----------------------------------------------------------------- accent */
+
+/*
+  Six, and none of them red, amber or green: those mean danger, warning and success here, and a
+  primary button in the colour of danger is a lie. Each keeps AA contrast with the text on it and
+  against the surfaces it sits on, in both themes and inside sRGB; accentContrast.spec.ts computes
+  every pair from this file. Blue is the default and lives in tokens.css.
+
+  The first chart series follows the accent: the categorical colour nearest to it swaps with the
+  first slot. No colour is added, so a chart never has two of nearly one hue, and the colours that
+  mean something stay put. Sky and slate are near enough to the first colour to leave it. The
+  palette's own separation for colour-blind readers is a separate matter: docs/backlog.md.
+*/
+:root[data-accent='sky'] {
+  --c-accent: oklch(50% 0.115 240);
+  --c-accent-hover: oklch(44% 0.1 240);
+  --c-accent-subtle: oklch(95% 0.025 240);
+}
+
+:root[data-theme='dark'][data-accent='sky'] {
+  --c-accent: oklch(66% 0.135 240);
+  --c-accent-hover: oklch(72% 0.135 240);
+  --c-accent-subtle: oklch(28% 0.06 240);
+  --c-accent-text: oklch(15% 0.01 240);
+}
+
+:root[data-accent='teal'] {
+  --c-accent: oklch(50% 0.085 200);
+  --c-accent-hover: oklch(44% 0.075 200);
+  --c-accent-subtle: oklch(95% 0.025 200);
+  --viz-1: var(--viz-base-2);
+  --viz-2: var(--viz-base-1);
+}
+
+:root[data-theme='dark'][data-accent='teal'] {
+  --c-accent: oklch(66% 0.105 200);
+  --c-accent-hover: oklch(72% 0.105 200);
+  --c-accent-subtle: oklch(28% 0.05 200);
+  --c-accent-text: oklch(15% 0.01 200);
+}
+
+:root[data-accent='violet'] {
+  --c-accent: oklch(53% 0.19 300);
+  --c-accent-hover: oklch(47% 0.195 300);
+  --c-accent-subtle: oklch(95% 0.026 300);
+  --viz-1: var(--viz-base-8);
+  --viz-8: var(--viz-base-1);
+}
+
+:root[data-theme='dark'][data-accent='violet'] {
+  --c-accent: oklch(68% 0.18 300);
+  --c-accent-hover: oklch(74% 0.15 300);
+  --c-accent-subtle: oklch(28% 0.06 300);
+  --c-accent-text: oklch(15% 0.01 300);
+}
+
+:root[data-accent='magenta'] {
+  --c-accent: oklch(53% 0.18 345);
+  --c-accent-hover: oklch(47% 0.185 345);
+  --c-accent-subtle: oklch(95% 0.03 345);
+  --viz-1: var(--viz-base-7);
+  --viz-7: var(--viz-base-1);
+}
+
+:root[data-theme='dark'][data-accent='magenta'] {
+  --c-accent: oklch(68% 0.17 345);
+  --c-accent-hover: oklch(74% 0.15 345);
+  --c-accent-subtle: oklch(28% 0.06 345);
+  --c-accent-text: oklch(15% 0.01 345);
+}
+
+/* For anyone who wants the interface out of the way. The charts keep their colours. */
+:root[data-accent='slate'] {
+  --c-accent: oklch(50% 0.035 255);
+  --c-accent-hover: oklch(44% 0.035 255);
+  --c-accent-subtle: oklch(94% 0.012 255);
+}
+
+:root[data-theme='dark'][data-accent='slate'] {
+  --c-accent: oklch(68% 0.03 255);
+  --c-accent-hover: oklch(74% 0.03 255);
+  --c-accent-subtle: oklch(30% 0.015 255);
+  --c-accent-text: oklch(15% 0.01 255);
+}
+
+/* ----------------------------------------------------------------- motion */
+
+/*
+  `data-motion` is always one of three, because `system` has been resolved by then: full, reduced or
+  none. Full and reduced are the motion-safe and motion-reduce variants (tokens.css). None is this:
+  nothing transitions and nothing animates, spinners and progress sweeps included, whose state is
+  also in their words.
+*/
+:root[data-motion='none'] {
+  --duration-press: 0ms;
+  --duration-popover: 0ms;
+  --duration-dialog: 0ms;
+  --duration-turn: 0ms;
+  --duration-morph: 0ms;
+}
+
+:root[data-motion='none'] *,
+:root[data-motion='none'] *::before,
+:root[data-motion='none'] *::after {
+  transition: none !important;
+  animation: none !important;
+  scroll-behavior: auto !important;
+}

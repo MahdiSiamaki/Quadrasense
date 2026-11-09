@@ -9,7 +9,8 @@ import { fillCalendar, isMissing } from '@/lib/calendar'
 import { chartColor, withAlpha } from '@/lib/chart-colors'
 import { feedQualityMarkArea, feedQualityTooltip } from '@/lib/feed-quality-bands'
 import { formatCompact, formatFull } from '@/lib/format'
-import { useTheme } from '@/lib/theme'
+import { useChartRevision } from '@/lib/appearance'
+import { setThemedOption } from '@/lib/chart-theme'
 import { tooltipBounds } from '@/lib/chart-tooltip'
 import { leaveWheelToPage } from '@/lib/chart-zoom'
 
@@ -42,7 +43,7 @@ const props = withDefaults(
 
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
-const { isDark } = useTheme()
+const revision = useChartRevision()
 
 const flagged = computed(
   () => new Map(props.days.filter((d) => d.flagged.length).map((d) => [d.date, d.flagged.map((c) => CHECK_LABELS[c] ?? c).join(', ')])),
@@ -81,7 +82,8 @@ function render() {
   const days = fillCalendar(props.days)
   const dates = days.map((d) => d.date)
 
-  chart.value.setOption(
+  setThemedOption(
+    chart.value,
     {
       animation: false,
       legend: { top: 0, right: 0, textStyle: { color: chartColor('--c-text-secondary'), fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
@@ -157,7 +159,7 @@ onBeforeUnmount(() => {
 })
 
 watch(() => [props.days, props.series, props.showFlagged], render, { deep: true })
-watch(isDark, () => requestAnimationFrame(render))
+watch(revision, () => requestAnimationFrame(render))
 </script>
 
 <template>

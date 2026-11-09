@@ -159,11 +159,9 @@ dialog[open]::backdrop {
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  @starting-style {
-    dialog[open] {
-      scale: 0.97;
-    }
+@starting-style {
+  :root[data-motion='full'] dialog[open] {
+    scale: 0.97;
   }
 }
 </style>

@@ -5,7 +5,8 @@ import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, MarkAreaComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { formatCompact, formatDate, formatFull, formatMonth } from '@/lib/format'
-import { useTheme } from '@/lib/theme'
+import { useChartRevision } from '@/lib/appearance'
+import { setThemedOption } from '@/lib/chart-theme'
 import { chartColor } from '@/lib/chart-colors'
 import { tooltipBounds } from '@/lib/chart-tooltip'
 import { feedQualityMarkArea, feedQualityTooltip } from '@/lib/feed-quality-bands'
@@ -46,7 +47,7 @@ const props = withDefaults(
 
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
-const { isDark } = useTheme()
+const revision = useChartRevision()
 
 /*
   Tokens are oklch, and ECharts needs a colour it can compute with, not only paint. Reading the
@@ -88,7 +89,8 @@ function render() {
     return isolated ? { value: b.value, symbol: 'circle', symbolSize: 5 } : { value: b.value, symbol: 'none' }
   })
 
-  chart.value.setOption(
+  setThemedOption(
+    chart.value,
     {
       animation: false,
       grid: { left: 8, right: 8, top: 28, bottom: 8 },
@@ -181,7 +183,7 @@ onBeforeUnmount(() => {
 })
 
 watch(() => [props.buckets, props.grain, props.chart, props.flagged], render, { deep: true })
-watch(isDark, () => requestAnimationFrame(render))
+watch(revision, () => requestAnimationFrame(render))
 </script>
 
 <template>

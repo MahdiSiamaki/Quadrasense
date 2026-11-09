@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useFreshness } from '@/features/imports/useImportQueries'
 import { formatDate } from '@/lib/format'
 import { useAuth, Permission } from '@/features/auth/useAuth'
 import { useLogout } from '@/api/auth'
+import { adoptAppearance, releaseAppearance } from '@/lib/appearance'
 import UserMenu from '@/features/auth/UserMenu.vue'
 import UploadIndicator from '@/features/imports/UploadIndicator.vue'
 import BrandMark from '@/design-system/BrandMark.vue'
@@ -15,6 +16,19 @@ const router = useRouter()
 
 const { user, isAuthenticated, can, canAny } = useAuth()
 const logout = useLogout()
+
+/*
+  The account's look, when the person is known. On the id and not the whole user: the user is
+  fetched again every so often, and that must not put back a look that is being changed right now.
+*/
+watch(
+  () => user.value?.id ?? null,
+  (id) => {
+    if (id === null) releaseAppearance()
+    else adoptAppearance(id, user.value?.appearance ?? null)
+  },
+  { immediate: true },
+)
 
 /**
  * Routes that render themselves whole, without the application shell.
@@ -193,9 +207,7 @@ async function signOut() {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .settings-link svg {
-    transition: none;
-  }
+:root:not([data-motion='full']) .settings-link svg {
+  transition: none;
 }
 </style>

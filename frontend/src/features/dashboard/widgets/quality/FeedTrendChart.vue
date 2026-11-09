@@ -11,7 +11,8 @@ import { tooltipBounds } from '@/lib/chart-tooltip'
 import { leaveWheelToPage } from '@/lib/chart-zoom'
 import { feedQualityMarkArea } from '@/lib/feed-quality-bands'
 import { formatCompact, formatFull, formatPercent } from '@/lib/format'
-import { useTheme } from '@/lib/theme'
+import { useChartRevision } from '@/lib/appearance'
+import { setThemedOption } from '@/lib/chart-theme'
 import { CHECK_COLOURS, checkCount, checkRate, checkThreshold } from './feedTrend'
 
 echarts.use([LineChart, DataZoomComponent, GridComponent, LegendComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent, CanvasRenderer])
@@ -35,7 +36,7 @@ const props = withDefaults(
 
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
-const { isDark } = useTheme()
+const revision = useChartRevision()
 
 function render() {
   if (!chart.value) return
@@ -70,7 +71,8 @@ function render() {
     }
   })
 
-  chart.value.setOption(
+  setThemedOption(
+    chart.value,
     {
       animation: false,
       legend: { top: 0, right: 0, textStyle: { color: chartColor('--c-text-secondary'), fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
@@ -131,7 +133,7 @@ onBeforeUnmount(() => {
 })
 
 watch(() => [props.days, props.checks, props.measure, props.showReference, props.zoomStart], render, { deep: true })
-watch(isDark, () => requestAnimationFrame(render))
+watch(revision, () => requestAnimationFrame(render))
 </script>
 
 <template>

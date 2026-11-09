@@ -49,6 +49,8 @@ export interface CurrentUser {
    * refuses everything else until it is done.
    */
   mustSetUpTwoStep: boolean
+  /** What this person last saved, or null if they never have. See `lib/appearance.ts`. */
+  appearance: Record<string, string> | null
 }
 
 /** Why a sign-in was refused. */

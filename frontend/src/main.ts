@@ -5,6 +5,8 @@ import App from './App.vue'
 import { router } from './router'
 import { queryClient } from './lib/queryClient'
 import './design-system/tokens.css'
+import './design-system/fonts.css'
+import './design-system/appearance.css'
 
 const app = createApp(App)
 
