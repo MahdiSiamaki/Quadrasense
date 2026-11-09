@@ -7,8 +7,8 @@
 #   docker build -f deploy/images/backend/Dockerfile --target migrator -t quadrasense/migrator:<tag> .
 #
 # The context is the repository root, not backend/: the worker embeds db/analytics/jobs/
-# refresh_marts.sql, the application layer embeds the frontend's widget contract, and the migrator
-# carries db/*/migrations.
+# refresh_marts.sql, the application layer embeds two contracts shared with the frontend, and the
+# migrator carries db/*/migrations.
 #
 # Runs on OpenShift's restricted-v2 SCC unchanged: a non-root user, no file the process needs to
 # write inside the image, and nothing that depends on which UID it is given. OpenShift starts the
@@ -50,9 +50,12 @@ RUN set -eu; \
 
 COPY backend/ backend/
 COPY db/ db/
-# The two files the .NET projects embed from outside backend/: the mart refresh (Sqm.Ingestion,
-# under db/ above) and the dashboard widget contract, one file shared with the frontend (ADR-016).
+# The files the .NET projects embed from outside backend/: the mart refresh (Sqm.Ingestion, under
+# db/ above), and two files shared with the frontend, the dashboard widget contract (ADR-016) and the
+# appearance contract (ADR-023). BackendImageTests fails on an embedded file this does not copy: the
+# appearance contract was missed once, and only the image build noticed.
 COPY frontend/src/features/dashboard/registry/widget-contract.json frontend/src/features/dashboard/registry/
+COPY frontend/src/lib/appearance-contract.json frontend/src/lib/
 
 RUN set -eu; \
     dotnet publish backend/src/Sqm.Api/Sqm.Api.csproj             -c Release --no-restore -o /out/api      -p:UseAppHost=false; \
