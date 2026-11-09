@@ -83,6 +83,22 @@ decisions some of these wait on are numbered in `docs/operations/deployment/READ
 | **Captcha on the login page** | Red lines §2-3 row 3: hidden at first, shown after three failed logins, Persian digits and letters in several Persian fonts, at least ten patterns, resistant to OCR, with an on-screen keyboard. **Decided 2026-11-09: required, as the one exception to English-only** | Self-hosted, every font in the image (row 4 of §1-3); medium | The MCI release: built for it, not before |
 | **High availability: PostgreSQL replication, ClickHouse replication with Keeper, a second site** | Red lines §2-3; `03-…` §5 sizes each | Medium to large; ClickHouse's is a migration of every table | Decision 7 |
 
+## Integration API (ADR-024, 2026-11-09)
+
+What the estate's figure v6 asks of PI and this API does not yet do. The full gap analysis is
+`docs/integration/PI-INTEGRATION-MATRIX.md` §3; these are the items with a next step.
+
+| What | Why, and the evidence | Cost | Waits on |
+|---|---|---|---|
+| **A settings page for integration clients** | Registering, rotating and deactivating a client is an API call today (`/api/v1/integration/clients`) | A page under Settings; the API and its tests exist | The first real client being registered |
+| **Declared swaps in the risk rules** | A swap CRM declared explains an observed SIM change; today both are shown side by side and the rules count the change regardless | A join in the risk snapshot on `integration.declared_event`, and a rule for how a declared change discounts the evidence | Real events from Lodestone, to know their volume and quality; the owner's decision |
+| **BI's usage and SNQM's per-model quality feeds** (v6 E2) | Drawn into PI; no format, schedule or sample exists, and an intake now would invent their data model | An import source each, like SQM's | Each system's interface |
+| **GSMA catalogue sync** (v6 E1) | Today a versioned upload by hand (ADR-009); activations are now published as events | A scheduled fetch, and a decision whether activation stays a person's step | GSMA access for PI |
+| **Signalling taps** (v6 E3: ULR, AIR, SRI-SM, ATI) | IMEI-SV, software version and visited network on every attach; the landscape's most valuable input to PI | A tap, a streaming intake, and lifting the "no streaming" non-goal (`01-overview.md`) | The network team; the owner's decision |
+| **eUICC inventory: EID and profile state** | No feed carries them; the API refuses an EID with that reason | An RSP or Fusionflow feed | Who owns profile stock (doc 20, question 4) |
+| **mTLS between Lodestone and PI** | Client credentials authenticate the caller; mTLS would also pin the network peer | An ingress setting and certificates from MCI's CA | MCI's platform; Lodestone |
+| **A list-sized target resolver for Skyconnect** (v6 E7) | The batch lookup takes 50 identifiers; a campaign is millions of cards, today an approved CSV carried by a person (`19-network-planning.md` §4) | A streamed, approved, audited export through the API | Keyset references and contract data, which PI does not hold |
+
 ## Identity and access (recorded as not built)
 
 | What | Status |

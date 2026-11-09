@@ -191,6 +191,13 @@ public static class Permissions
     /// <summary>Operational settings not covered by a narrower permission.</summary>
     public const string SystemAdmin = "system.admin";
 
+    /// <summary>
+    /// Register the systems that call the integration API, choose their scopes, rotate their secrets
+    /// and deactivate them (ADR-024). Dangerous: a client with inventory.read and identifiers.reveal
+    /// reads every subscriber's SIM and handset.
+    /// </summary>
+    public const string IntegrationManage = "integration.manage";
+
     /// <summary>Every permission code known to this build.</summary>
     public static readonly FrozenSet<string> All = new[]
     {
@@ -200,7 +207,7 @@ public static class Permissions
         DeviceView, LookupImei, DeviceIdentifiers, DeviceImageManage,
         ImportView, ImportUploadSqm, ImportUploadTac, ImportReprocess, ImportCancel, ImportDelete,
         TacActivate, TacRollback,
-        UserView, UserManage, RoleView, RoleManage, AuditView, SystemAdmin,
+        UserView, UserManage, RoleView, RoleManage, AuditView, SystemAdmin, IntegrationManage,
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>

@@ -22,6 +22,10 @@ public static partial class TacEndpoints
     private static partial void LogAnalyticsSwitchFailed(
         ILogger logger, string versionLabel, Exception exception);
 
+    [LoggerMessage(EventId = 1201, Level = LogLevel.Error,
+        Message = "TAC version {VersionLabel} was activated but its integration event could not be written")]
+    private static partial void LogEventFailed(ILogger logger, string versionLabel, Exception exception);
+
     /// <summary>Registers the TAC routes.</summary>
     public static IEndpointRouteBuilder MapTacEndpoints(this IEndpointRouteBuilder app)
     {
@@ -71,6 +75,7 @@ public static partial class TacEndpoints
         long id,
         IImportJobRepository repository,
         ITacVersionStore tacStore,
+        Sqm.Application.Integration.IIntegrationOutbox outbox,
         HttpContext http,
         ILoggerFactory loggerFactory,
         CancellationToken ct)
@@ -125,6 +130,27 @@ public static partial class TacEndpoints
         // the same path a deferred daily file uses. A rollback is an activation too.
         await repository.MarkDashboardOwedAsync(
             DashboardSource, null, $"TAC version {activation.VersionLabel} activated", ct).ConfigureAwait(false);
+
+        // The integration feed (ADR-024): makes, models and capabilities may have changed for every TAC, so a
+        // reader holding device profiles knows to read them again. Written after both stores agree, so a
+        // reverted activation publishes nothing. A failure here does not undo an activation that happened;
+        // it is logged, and a reader still sees the version in every device model's catalogueVersionId.
+        try
+        {
+            await outbox.AppendAsync(
+                Sqm.Application.Integration.IntegrationEventTypes.CatalogueActivated, activation.VersionLabel,
+                new
+                {
+                    versionLabel = activation.VersionLabel,
+                    tacVersionId = activation.TacVersionId,
+                    replacesVersionLabel = activation.PreviousVersionLabel,
+                },
+                ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogEventFailed(logger, activation.VersionLabel, ex);
+        }
 
         await repository.WriteAuditAsync(
             actor, "tac.activate.completed", null, null, activation.TacVersionId,

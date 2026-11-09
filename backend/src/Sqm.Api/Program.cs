@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Sqm.Api.Auth;
+using Sqm.Api.Integration;
 using Sqm.Api.Endpoints;
 using Sqm.Api.Infrastructure;
 using Sqm.Application.Abstractions;
@@ -229,9 +230,28 @@ builder.Services.AddSingleton<ITwoStepService, PostgresTwoStepService>();
 builder.Services.AddSingleton<IAppearanceStore, PostgresAppearanceStore>();
 builder.Services.AddHostedService<AccountOutboxDispatcher>();
 
+// The integration API (ADR-024): registered systems, their tokens, CRM's declared events, PI's event feed
+// and each day's binding changes. PostgreSQL holds the first four; the changes are read from ClickHouse.
+builder.Services.Configure<Sqm.Application.Integration.IntegrationOptions>(
+    builder.Configuration.GetSection(Sqm.Application.Integration.IntegrationOptions.SectionName));
+builder.Services.AddSingleton<Sqm.Application.Integration.IIntegrationClientStore,
+    Sqm.Infrastructure.Integration.PostgresIntegrationClientStore>();
+builder.Services.AddSingleton<Sqm.Application.Integration.IDeclaredEventStore,
+    Sqm.Infrastructure.Integration.PostgresDeclaredEventStore>();
+builder.Services.AddSingleton<Sqm.Application.Integration.IIntegrationOutbox,
+    Sqm.Infrastructure.Integration.PostgresIntegrationOutbox>();
+builder.Services.AddSingleton<Sqm.Application.Integration.IBindingChangeReader,
+    Sqm.Infrastructure.ClickHouse.ClickHouseBindingChangeReader>();
+builder.Services.AddSingleton<Sqm.Api.Integration.IntegrationRateLimiter>();
+builder.Services.AddHostedService<Sqm.Api.Integration.IntegrationSweeper>();
+
+// The session is the default scheme; the integration API's bearer tokens are a scheme of their own that
+// only the integration routes ask for (ADR-024), so neither credential opens the other's routes.
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions,
-        SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, null);
+        SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, null)
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions,
+        IntegrationBearerHandler>(IntegrationBearerHandler.SchemeName, null);
 
 // The policy provider builds a policy for any permission code on demand, and - the part that
 // matters - supplies a non-null FALLBACK policy. An endpoint added without RequireAuthorization
@@ -239,6 +259,7 @@ builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
 // visible in review where a missing call is not.
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, ScopeAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler,
     AuditingAuthorizationResultHandler>();
 builder.Services.AddAuthorization();
@@ -273,6 +294,12 @@ builder.Services.AddRateLimiter(o =>
     PerAddress(AuthEndpoints.LoginRateLimiter, 6);
     PerAddress(AccountSecurityEndpoints.RecoveryRateLimiter, 6);
     PerAddress(AccountSecurityEndpoints.ConfirmRateLimiter, 12);
+
+    // The integration API's token endpoint is anonymous by necessity; a client is known only once it has
+    // authenticated, so this one limit is per address. The routes behind it are limited per client.
+    PerAddress(Sqm.Api.Integration.IntegrationApi.TokenRateLimiter,
+        builder.Configuration.GetSection(Sqm.Application.Integration.IntegrationOptions.SectionName)
+            .Get<Sqm.Application.Integration.IntegrationOptions>()?.TokenRequestsPerMinute ?? 30);
 });
 
 builder.Services.ConfigureHttpJsonOptions(o =>
@@ -297,6 +324,8 @@ builder.Services.AddProblemDetails();
 // A store timeout is a 504 that says so (StoreTimeoutExceptionHandler); everything else stays a 500.
 builder.Services.AddExceptionHandler<Sqm.Api.Infrastructure.StoreTimeoutExceptionHandler>();
 builder.Services.AddOpenApi();
+// The integration API's own document: what Lodestone's and Tessera's developers read (ADR-024).
+builder.Services.AddOpenApi(Sqm.Api.Integration.IntegrationApi.DocumentName, Sqm.Api.Integration.IntegrationOpenApi.Configure);
 
 // CORS is restricted to the known frontend origin. No wildcard: the API will
 // eventually carry credentials, and `*` is incompatible with that anyway.
@@ -384,6 +413,14 @@ app.MapPlanningEndpoints();
 app.MapCampaignExportEndpoints();
 app.MapModelArrivalEndpoints();
 app.MapDeviceImageReviewEndpoints();
+
+// The integration API (ADR-024): machine clients only, behind bearer tokens, under /api/integration/v1;
+// and the administrators' page for registering them, under the UI's /api/v1.
+app.MapIntegrationTokenEndpoints();
+app.MapIntegrationInventoryEndpoints();
+app.MapIntegrationEventEndpoints();
+app.MapIntegrationStatusEndpoints();
+app.MapIntegrationClientEndpoints();
 
 await app.RunAsync().ConfigureAwait(false);
 

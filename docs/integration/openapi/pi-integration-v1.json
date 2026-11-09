@@ -1,0 +1,3445 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Quadrasense PI integration API",
+    "description": "Primary Inventory's machine interface for the systems of the SIM and eSIM estate: Lodestone (IEH) first, and Tessera (PDC) where it is registered directly. OAuth 2.0 client credentials; every identifier in a request body, never a URL. See docs/integration/PI-API-CATALOG.md.",
+    "version": "1.0"
+  },
+  "paths": {
+    "/api/integration/v1/oauth/token": {
+      "post": {
+        "tags": [
+          "Integration: authentication"
+        ],
+        "summary": "OAuth 2.0 client credentials: a registered system's id and secret for a bearer token.",
+        "operationId": "IssueIntegrationToken",
+        "requestBody": {
+          "description": "RFC 6749 §4.4.2. The client authenticates with HTTP Basic, or with client_id and client_secret here.",
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "required": [
+                  "grant_type"
+                ],
+                "type": "object",
+                "properties": {
+                  "grant_type": {
+                    "type": "string",
+                    "description": "Always client_credentials."
+                  },
+                  "scope": {
+                    "type": "string",
+                    "description": "Space-separated scopes; all the client holds when left out."
+                  },
+                  "client_id": {
+                    "type": "string",
+                    "description": "The client's id, when not sent with HTTP Basic."
+                  },
+                  "client_secret": {
+                    "type": "string",
+                    "description": "The client's secret, when not sent with HTTP Basic."
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integration/v1/inventory/lookup": {
+      "post": {
+        "tags": [
+          "Integration: inventory"
+        ],
+        "summary": "A number, SIM (IMSI or ICCID) or handset: its bindings, active and ended, with derived ICCIDs and models.",
+        "operationId": "IntegrationLookup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentifierRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryLookupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "inventory.read"
+            ]
+          }
+        ]
+      }
+    },
+    "/api/integration/v1/inventory/lookup/batch": {
+      "post": {
+        "tags": [
+          "Integration: inventory"
+        ],
+        "summary": "Several identifiers at once, each answered as a lookup or refused on its own.",
+        "operationId": "IntegrationBatchLookup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchLookupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchLookupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "inventory.read"
+            ]
+          }
+        ]
+      }
+    },
+    "/api/integration/v1/inventory/relationships": {
+      "post": {
+        "tags": [
+          "Integration: inventory"
+        ],
+        "summary": "Every number, SIM and handset connected to one identifier, with counts.",
+        "operationId": "IntegrationRelationships",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentifierRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelationshipGraph"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "inventory.read"
+            ]
+          }
+        ]
+      }
+    },
+    "/api/integration/v1/inventory/history": {
+      "post": {
+        "tags": [
+          "Integration: inventory"
+        ],
+        "summary": "Every binding of one identifier over time, and what CRM declared about it.",
+        "operationId": "IntegrationHistory",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentifierRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryHistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "inventory.read"
+            ]
+          }
+        ]
+      }
+    },
+    "/api/integration/v1/devices/models/{tac}": {
+      "get": {
+        "tags": [
+          "Integration: inventory"
+        ],
+        "summary": "What a TAC is: make, model, device type and capabilities, from the active GSMA catalogue.",
+        "operationId": "IntegrationDeviceModel",
+        "parameters": [
+          {
+            "name": "tac",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]{8}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceModelInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "inventory.read"
+            ]
+          }
+        ]
+      }
+    },
+    "/api/integration/v1/inventory/facts": {
+      "post": {
+        "tags": [
+          "Integration: inventory"
+        ],
+        "summary": "The device and SIM facts a policy decision is written against: observations, never a decision.",
+        "operationId": "IntegrationFacts",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentifierRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryFactsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "facts.read"
+            ]
+          }
+        ]
+      }
+    },
+    "/api/integration/v1/inventory/changes": {
+      "post": {
+        "tags": [
+          "Integration: inventory"
+        ],
+        "summary": "One day's binding adds and removes, a page at a time, for a copy kept in step.",
+        "operationId": "IntegrationBindingChanges",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingChangesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingChangesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "inventory.sync"
+            ]
+          }
+        ]
+      }
+    },
+    "/api/integration/v1/events": {
+      "get": {
+        "tags": [
+          "Integration: events"
+        ],
+        "summary": "PI's events after a cursor, oldest first: inventory.day-imported, catalogue.version-activated.",
+        "operationId": "IntegrationEventFeed",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationEventPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "events.read"
+            ]
+          }
+        ]
+      }
+    },
+    "/api/integration/v1/events/declared": {
+      "post": {
+        "tags": [
+          "Integration: events"
+        ],
+        "summary": "CRM's SIM swaps, activations and deactivations, delivered by Lodestone. Idempotent by event id.",
+        "operationId": "IntegrationDeclaredEvents",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclaredEventsDelivery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclaredEventsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclaredEventsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "events.write"
+            ]
+          }
+        ]
+      }
+    },
+    "/api/integration/v1/status": {
+      "get": {
+        "tags": [
+          "Integration: status and quality"
+        ],
+        "summary": "The calling client, its scopes, and how fresh PI's data is.",
+        "operationId": "IntegrationStatus",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationStatusResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2": []
+          }
+        ]
+      }
+    },
+    "/api/integration/v1/quality/feed": {
+      "get": {
+        "tags": [
+          "Integration: status and quality"
+        ],
+        "summary": "Each daily file judged against the ordinary days: shifted IMEIs, SIMs with several numbers, malformed IMEIs.",
+        "operationId": "IntegrationFeedQuality",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedQualityResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "quality.read"
+            ]
+          }
+        ]
+      }
+    },
+    "/api/integration/v1/quality/signals": {
+      "get": {
+        "tags": [
+          "Integration: status and quality"
+        ],
+        "summary": "Data-quality signals over the current state: invalid identifiers, contradictions, binding lifetimes.",
+        "operationId": "IntegrationQualitySignals",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualitySignalsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "quality.read"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BatchLookupItem": {
+        "required": [
+          "index",
+          "outcome",
+          "problem",
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "index": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Its place in the request.",
+            "format": "int32"
+          },
+          "outcome": {
+            "type": "string",
+            "description": "found, notFound or invalid."
+          },
+          "problem": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For an invalid one, why."
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "For a valid one, the lookup.",
+                "$ref": "#/components/schemas/InventoryLookupResponse"
+              }
+            ]
+          }
+        },
+        "description": "One identifier of a batch, resolved or refused."
+      },
+      "BatchLookupRequest": {
+        "required": [
+          "identifiers"
+        ],
+        "type": "object",
+        "properties": {
+          "identifiers": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/IdentifierRequest"
+            },
+            "description": "At most the configured batch size."
+          }
+        },
+        "description": "Several identifiers at once."
+      },
+      "BatchLookupResponse": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BatchLookupItem"
+            },
+            "description": "One per identifier sent, in order."
+          }
+        },
+        "description": "A batch of lookups."
+      },
+      "BindingChangeInfo": {
+        "required": [
+          "msisdn",
+          "imsi",
+          "iccid",
+          "imei",
+          "tac",
+          "change",
+          "delivery"
+        ],
+        "type": "object",
+        "properties": {
+          "msisdn": {
+            "type": "string",
+            "description": "The number."
+          },
+          "imsi": {
+            "type": "string",
+            "description": "The SIM."
+          },
+          "iccid": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The SIM's derived ICCID."
+          },
+          "imei": {
+            "type": "string",
+            "description": "The handset."
+          },
+          "tac": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The handset's model."
+          },
+          "change": {
+            "type": "string",
+            "description": "add or remove."
+          },
+          "delivery": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The delivery sequence it came in.",
+            "format": "int32"
+          }
+        },
+        "description": "One binding added or removed."
+      },
+      "BindingChangesRequest": {
+        "required": [
+          "date"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The business date, yyyy-MM-dd."
+          },
+          "cursor": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The `next` of the previous page; left out for the first."
+          },
+          "limit": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Changes in the page; the configured default when left out.",
+            "format": "int32"
+          }
+        },
+        "description": "A page of one day's binding changes to read."
+      },
+      "BindingChangesResponse": {
+        "required": [
+          "date",
+          "changes",
+          "next",
+          "identifiers"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "The business date."
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BindingChangeInfo"
+            },
+            "description": "The changes, in key order."
+          },
+          "next": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The cursor for the next page, or null on the last."
+          },
+          "identifiers": {
+            "type": "string",
+            "description": "full, or masked when the token lacks identifiers.reveal."
+          }
+        },
+        "description": "A page of one day's binding changes."
+      },
+      "DeclaredEventInfo": {
+        "required": [
+          "eventId",
+          "source",
+          "type",
+          "occurredAt",
+          "receivedAt",
+          "msisdn",
+          "imsi",
+          "iccid",
+          "previousImsi",
+          "previousIccid",
+          "reference",
+          "deliveredBy"
+        ],
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "description": "The sender's id."
+          },
+          "source": {
+            "type": "string",
+            "description": "The system that declared it."
+          },
+          "type": {
+            "type": "string",
+            "description": "sim-swap, activation or deactivation."
+          },
+          "occurredAt": {
+            "type": "string",
+            "description": "When it happened."
+          },
+          "receivedAt": {
+            "type": "string",
+            "description": "When PI received it."
+          },
+          "msisdn": {
+            "type": "string",
+            "description": "The number."
+          },
+          "imsi": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The SIM by IMSI."
+          },
+          "iccid": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The SIM by ICCID."
+          },
+          "previousImsi": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a swap, the SIM left."
+          },
+          "previousIccid": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a swap, the SIM left."
+          },
+          "reference": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The sender's reference."
+          },
+          "deliveredBy": {
+            "type": "string",
+            "description": "The client that delivered it."
+          }
+        },
+        "description": "A declared event as PI answers it."
+      },
+      "DeclaredEventInput": {
+        "required": [
+          "eventId",
+          "source",
+          "type",
+          "occurredAt",
+          "msisdn"
+        ],
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The sender's id, unique per client: the idempotency key."
+          },
+          "source": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The system that declared it, such as `crm`."
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "sim-swap, activation or deactivation."
+          },
+          "occurredAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When it happened, ISO 8601 with an offset.",
+            "format": "date-time"
+          },
+          "msisdn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The number."
+          },
+          "imsi": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The SIM by IMSI, or leave it out and name it by ICCID."
+          },
+          "iccid": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The SIM by ICCID."
+          },
+          "previousImsi": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a swap: the SIM the number left, by IMSI."
+          },
+          "previousIccid": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a swap: the SIM the number left, by ICCID."
+          },
+          "reference": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The sender's own reference, such as an order number. Opaque to PI."
+          }
+        },
+        "description": "One declared event, as Lodestone delivers it from CRM."
+      },
+      "DeclaredEventResult": {
+        "required": [
+          "index",
+          "eventId",
+          "outcome",
+          "problems"
+        ],
+        "type": "object",
+        "properties": {
+          "index": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Its place in the delivery.",
+            "format": "int32"
+          },
+          "eventId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Its id, as sent."
+          },
+          "outcome": {
+            "type": "string",
+            "description": "accepted, duplicate, conflict or invalid."
+          },
+          "problems": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "For an invalid one, why, by field."
+          }
+        },
+        "description": "The outcome of one declared event delivered."
+      },
+      "DeclaredEventsDelivery": {
+        "required": [
+          "events"
+        ],
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/DeclaredEventInput"
+            },
+            "description": "At most the configured number per request."
+          }
+        },
+        "description": "A delivery of declared events."
+      },
+      "DeclaredEventsResponse": {
+        "required": [
+          "accepted",
+          "duplicates",
+          "rejected",
+          "results"
+        ],
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Stored now.",
+            "format": "int32"
+          },
+          "duplicates": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Stored before with the same content: retries, which are safe.",
+            "format": "int32"
+          },
+          "rejected": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Invalid, or an id used before for different content. The others were stored.",
+            "format": "int32"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclaredEventResult"
+            },
+            "description": "One per event, in order."
+          }
+        },
+        "description": "The outcome of a delivery of declared events."
+      },
+      "DeviceCapabilitiesInfo": {
+        "required": [
+          "lte",
+          "fiveG",
+          "esim",
+          "imsEmergency",
+          "bands",
+          "simSlots",
+          "imeiQuantity",
+          "nfc",
+          "wlan",
+          "bluetooth"
+        ],
+        "type": "object",
+        "properties": {
+          "lte": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "LTE."
+          },
+          "fiveG": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "5G."
+          },
+          "esim": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "An eUICC."
+          },
+          "imsEmergency": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "IMS emergency calling. Not VoLTE: the catalogue does not hold VoLTE."
+          },
+          "bands": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The band list."
+          },
+          "simSlots": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "SIM slots."
+          },
+          "imeiQuantity": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "IMEIs the model carries: two for a dual-SIM handset."
+          },
+          "nfc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "NFC."
+          },
+          "wlan": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "WLAN."
+          },
+          "bluetooth": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Bluetooth."
+          }
+        },
+        "description": "A model's capabilities, as the GSMA catalogue records them; null where it does not say."
+      },
+      "DeviceFactsInfo": {
+        "required": [
+          "imei",
+          "model"
+        ],
+        "type": "object",
+        "properties": {
+          "imei": {
+            "type": "string",
+            "description": "The handset."
+          },
+          "model": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Its model; null when the TAC is not in the catalogue and the network has not counted it.",
+                "$ref": "#/components/schemas/DeviceModelInfo"
+              }
+            ]
+          }
+        },
+        "description": "A handset in an active binding, and its model."
+      },
+      "DeviceModelInfo": {
+        "required": [
+          "tac",
+          "knownToGsma",
+          "manufacturer",
+          "brand",
+          "model",
+          "marketingName",
+          "deviceType",
+          "operatingSystem",
+          "capabilities",
+          "allocationDate",
+          "catalogueVersionId"
+        ],
+        "type": "object",
+        "properties": {
+          "tac": {
+            "type": "string",
+            "description": "The eight digits."
+          },
+          "knownToGsma": {
+            "type": "boolean",
+            "description": "Whether the active catalogue lists it; seen on the network but unlisted otherwise."
+          },
+          "manufacturer": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The manufacturer."
+          },
+          "brand": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The brand."
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The model name."
+          },
+          "marketingName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The marketing name."
+          },
+          "deviceType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The GSMA device type: Smartphone, Modem, IoT Device and so on."
+          },
+          "operatingSystem": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The operating system."
+          },
+          "capabilities": {
+            "description": "What the catalogue says it can do.",
+            "$ref": "#/components/schemas/DeviceCapabilitiesInfo"
+          },
+          "allocationDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When GSMA allocated the TAC."
+          },
+          "catalogueVersionId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The catalogue version answering.",
+            "format": "int32"
+          }
+        },
+        "description": "A device model: what a TAC is, from the active GSMA catalogue."
+      },
+      "FeedQualityDayInfo": {
+        "required": [
+          "date",
+          "rows",
+          "sims",
+          "unknownDeviceRows",
+          "malformedImeiRows",
+          "unknownTacRows",
+          "shiftedImeiRows",
+          "multiNumberSims",
+          "multiNumberSimRows",
+          "flagged",
+          "findings"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "The business date.",
+            "format": "date"
+          },
+          "rows": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Rows in the day's file.",
+            "format": "int64"
+          },
+          "sims": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Distinct SIMs in it.",
+            "format": "int64"
+          },
+          "unknownDeviceRows": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Rows with the 000000 sentinel.",
+            "format": "int64"
+          },
+          "malformedImeiRows": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Rows whose IMEI is neither 14 digits nor the sentinel.",
+            "format": "int64"
+          },
+          "unknownTacRows": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "14-digit IMEIs with a TAC GSMA does not know.",
+            "format": "int64"
+          },
+          "shiftedImeiRows": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Of those, IMEIs that look shifted by one digit.",
+            "format": "int64"
+          },
+          "multiNumberSims": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "SIMs with more than one number on the day.",
+            "format": "int64"
+          },
+          "multiNumberSimRows": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Rows those SIMs carry.",
+            "format": "int64"
+          },
+          "flagged": {
+            "type": "boolean",
+            "description": "True when any check is out of line."
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeedQualityFindingInfo"
+            },
+            "description": "Every check, flagged or not."
+          }
+        },
+        "description": "One day's counts and findings."
+      },
+      "FeedQualityFindingInfo": {
+        "required": [
+          "check",
+          "rate",
+          "threshold",
+          "referenceMedian",
+          "flagged",
+          "explanation"
+        ],
+        "type": "object",
+        "properties": {
+          "check": {
+            "type": "string",
+            "description": "ShiftedImei, MultiNumberSim, MalformedImei or UnknownDevice."
+          },
+          "rate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "The day's rate, 0 to 1.",
+            "format": "double"
+          },
+          "threshold": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Above this the day is flagged; null without reference days.",
+            "format": "double"
+          },
+          "referenceMedian": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "The reference days' median rate.",
+            "format": "double"
+          },
+          "flagged": {
+            "type": "boolean",
+            "description": "True when out of line."
+          },
+          "explanation": {
+            "type": "string",
+            "description": "What was measured, against what."
+          }
+        },
+        "description": "One check of one day."
+      },
+      "FeedQualityReferenceInfo": {
+        "required": [
+          "from",
+          "to",
+          "days",
+          "multiplier",
+          "minimumRate"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "First reference day.",
+            "format": "date"
+          },
+          "to": {
+            "type": "string",
+            "description": "Last reference day.",
+            "format": "date"
+          },
+          "days": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many reference days had been measured.",
+            "format": "int32"
+          },
+          "multiplier": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "A rate above this many times the reference days' median is flagged.",
+            "format": "double"
+          },
+          "minimumRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "No rate below this is flagged, 0 to 1.",
+            "format": "double"
+          }
+        },
+        "description": "The reference window and the rule applied against it."
+      },
+      "FeedQualityResponse": {
+        "required": [
+          "reference",
+          "days"
+        ],
+        "type": "object",
+        "properties": {
+          "reference": {
+            "description": "The days the judgement is made against.",
+            "$ref": "#/components/schemas/FeedQualityReferenceInfo"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeedQualityDayInfo"
+            },
+            "description": "The requested days, oldest first."
+          }
+        },
+        "description": "Each day's file judged against the ordinary days, and what \"ordinary\" was."
+      },
+      "HttpValidationProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "IdentifierRequest": {
+        "required": [
+          "identifier"
+        ],
+        "type": "object",
+        "properties": {
+          "identifier": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A phone number (10 digits), an IMSI (15), an ICCID (19) or an IMEI (14)."
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "msisdn, imsi, iccid or imei; read from the length when left out."
+          }
+        },
+        "description": "One identifier to resolve. In the body, never the URL (MCI red lines, §2-3 row 7)."
+      },
+      "IdentifierVisibility": {
+        "enum": [
+          "Masked",
+          "Full"
+        ],
+        "description": "Whether identifiers in a response are complete or redacted.",
+        "default": "Full"
+      },
+      "IntegrationEventInfo": {
+        "required": [
+          "sequence",
+          "id",
+          "type",
+          "subject",
+          "occurredAt",
+          "payload"
+        ],
+        "type": "object",
+        "properties": {
+          "sequence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Its place in the feed.",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "description": "Its id, for de-duplication.",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "description": "inventory.day-imported or catalogue.version-activated."
+          },
+          "subject": {
+            "type": "string",
+            "description": "What it is about."
+          },
+          "occurredAt": {
+            "type": "string",
+            "description": "When it was recorded."
+          },
+          "payload": {
+            "description": "Its detail.",
+            "$ref": "#/components/schemas/JsonElement"
+          }
+        },
+        "description": "One published event."
+      },
+      "IntegrationEventPage": {
+        "required": [
+          "events",
+          "next",
+          "oldestAvailable",
+          "latest"
+        ],
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IntegrationEventInfo"
+            },
+            "description": "The events after the cursor, oldest first."
+          },
+          "next": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The cursor to send next: the last sequence returned, or the one sent when nothing was.",
+            "format": "int64"
+          },
+          "oldestAvailable": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The lowest sequence still kept; a cursor below it means events were missed.",
+            "format": "int64"
+          },
+          "latest": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The highest sequence issued so far.",
+            "format": "int64"
+          }
+        },
+        "description": "A page of PI's event feed."
+      },
+      "IntegrationStatusResponse": {
+        "required": [
+          "apiVersion",
+          "client",
+          "scopes",
+          "dataThrough",
+          "history",
+          "sources"
+        ],
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "string",
+            "description": "The integration API's version."
+          },
+          "client": {
+            "type": "string",
+            "description": "The calling client."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The scopes its token carries."
+          },
+          "dataThrough": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The last day of the binding feed PI holds."
+          },
+          "history": {
+            "type": "string",
+            "description": "Ready, Building or NotDeployed: whether lookups and history can be answered."
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceStatusInfo"
+            },
+            "description": "Each feed's freshness."
+          }
+        },
+        "description": "The state of PI's data, for a client deciding whether to read now."
+      },
+      "InventoryBindingInfo": {
+        "required": [
+          "msisdn",
+          "imsi",
+          "iccid",
+          "iccidSource",
+          "imei",
+          "tac",
+          "brand",
+          "model",
+          "active",
+          "firstSeen",
+          "firstSeenIsDumpWindow",
+          "lastChange"
+        ],
+        "type": "object",
+        "properties": {
+          "msisdn": {
+            "type": "string",
+            "description": "The number."
+          },
+          "imsi": {
+            "type": "string",
+            "description": "The SIM."
+          },
+          "iccid": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The SIM's ICCID, derived from the IMSI by the operator's numbering; null when it does not apply."
+          },
+          "iccidSource": {
+            "type": "string",
+            "description": "Always `derived`: no feed PI receives carries ICCIDs."
+          },
+          "imei": {
+            "type": "string",
+            "description": "The handset."
+          },
+          "tac": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The handset's model: its first eight digits."
+          },
+          "brand": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The model's brand, from the active GSMA catalogue."
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The model's marketing name."
+          },
+          "active": {
+            "type": "boolean",
+            "description": "Still active."
+          },
+          "firstSeen": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The first day the feed named this binding."
+          },
+          "firstSeenIsDumpWindow": {
+            "type": "boolean",
+            "description": "That day is the initial dump's."
+          },
+          "lastChange": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The last day it changed."
+          }
+        },
+        "description": "One binding: a number, a SIM and a handset together."
+      },
+      "InventoryFactsResponse": {
+        "required": [
+          "kind",
+          "identifier",
+          "resolvedImsi",
+          "found",
+          "summary",
+          "networkAgeDays",
+          "devices",
+          "risk",
+          "riskUnavailable",
+          "declared",
+          "identifiers",
+          "dataThrough"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "msisdn, imsi, iccid or imei."
+          },
+          "identifier": {
+            "type": "string",
+            "description": "As sent."
+          },
+          "resolvedImsi": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For an ICCID, the IMSI it resolves to."
+          },
+          "found": {
+            "type": "boolean",
+            "description": "Whether any binding holds it."
+          },
+          "summary": {
+            "description": "Counts across its bindings.",
+            "$ref": "#/components/schemas/InventorySummary"
+          },
+          "networkAgeDays": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Days since the feed first named it; null when it came from the initial dump.",
+            "format": "int32"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeviceFactsInfo"
+            },
+            "description": "The handsets of its active bindings, with their models and capabilities."
+          },
+          "risk": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "PI's risk measures for it and the evidence level they reach - an observation, not a verdict; null when they are unavailable.",
+                "$ref": "#/components/schemas/RiskEntityResponse"
+              }
+            ]
+          },
+          "riskUnavailable": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Why risk measures are missing, when they are."
+          },
+          "declared": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclaredEventInfo"
+            },
+            "description": "What CRM declared about the number or the SIM, newest first."
+          },
+          "identifiers": {
+            "type": "string",
+            "description": "full, or masked when the token lacks identifiers.reveal."
+          },
+          "dataThrough": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The last day of the binding feed PI holds."
+          }
+        },
+        "description": "The facts a policy decision is written against (Tessera): what PI observed, never a decision. Whether\nsomething is eligible, blocked or grey-listed is Tessera's to say."
+      },
+      "InventoryHistoryResponse": {
+        "required": [
+          "kind",
+          "identifier",
+          "resolvedImsi",
+          "timeline",
+          "declared"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "msisdn, imsi, iccid or imei."
+          },
+          "identifier": {
+            "type": "string",
+            "description": "As sent."
+          },
+          "resolvedImsi": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For an ICCID, the IMSI it resolves to."
+          },
+          "timeline": {
+            "description": "The observed history, as the Explorer's timeline draws it.",
+            "$ref": "#/components/schemas/TimelineResponse"
+          },
+          "declared": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclaredEventInfo"
+            },
+            "description": "What CRM declared about the number or the SIM, newest first; empty for a handset."
+          }
+        },
+        "description": "One identifier's history: every binding over time, and what was declared about it."
+      },
+      "InventoryLookupResponse": {
+        "required": [
+          "kind",
+          "identifier",
+          "resolvedImsi",
+          "found",
+          "summary",
+          "bindings",
+          "truncated",
+          "identifiers",
+          "dataThrough"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "msisdn, imsi, iccid or imei."
+          },
+          "identifier": {
+            "type": "string",
+            "description": "As sent."
+          },
+          "resolvedImsi": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For an ICCID, the IMSI the operator's numbering derives it from."
+          },
+          "found": {
+            "type": "boolean",
+            "description": "Whether any binding holds it."
+          },
+          "summary": {
+            "description": "Counts across its bindings.",
+            "$ref": "#/components/schemas/InventorySummary"
+          },
+          "bindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventoryBindingInfo"
+            },
+            "description": "Its bindings, most recently changed first."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "More bindings exist than were returned."
+          },
+          "identifiers": {
+            "type": "string",
+            "description": "full, or masked when the token lacks identifiers.reveal."
+          },
+          "dataThrough": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The last day of the binding feed PI holds."
+          }
+        },
+        "description": "What PI knows of one identifier: its bindings, now and before."
+      },
+      "InventorySummary": {
+        "required": [
+          "bindings",
+          "activeBindings",
+          "numbers",
+          "sims",
+          "handsets",
+          "firstSeen",
+          "firstSeenIsDumpWindow",
+          "lastChange"
+        ],
+        "type": "object",
+        "properties": {
+          "bindings": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Number + SIM + handset combinations ever held.",
+            "format": "int32"
+          },
+          "activeBindings": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Those still active.",
+            "format": "int32"
+          },
+          "numbers": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Distinct numbers among them.",
+            "format": "int32"
+          },
+          "sims": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Distinct SIMs.",
+            "format": "int32"
+          },
+          "handsets": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Distinct handsets.",
+            "format": "int32"
+          },
+          "firstSeen": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The first day the feed named it."
+          },
+          "firstSeenIsDumpWindow": {
+            "type": "boolean",
+            "description": "The first day is the initial dump's, which covers a month, not a day."
+          },
+          "lastChange": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The last day one of its bindings changed."
+          }
+        },
+        "description": "Counts across one identifier's bindings."
+      },
+      "JsonElement": {},
+      "PairedHandset": {
+        "required": [
+          "imei",
+          "marketingName",
+          "sharedSubscribers"
+        ],
+        "type": "object",
+        "properties": {
+          "imei": {
+            "type": "string",
+            "description": "The partner handset."
+          },
+          "marketingName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Its model, which will match the centre's."
+          },
+          "sharedSubscribers": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many phone numbers have been seen on both. This is the evidence: it is what distinguishes\na real pair from two handsets that merely came off the line one after another.",
+            "format": "int32"
+          }
+        },
+        "description": "Two IMEIs shown to be the two radios of one physical handset."
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "QualityBaseInfo": {
+        "required": [
+          "code",
+          "label",
+          "bindings",
+          "numbers",
+          "sims",
+          "imeis"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "all, active or history_all."
+          },
+          "label": {
+            "type": "string",
+            "description": "A short name."
+          },
+          "bindings": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Bindings in it.",
+            "format": "int64"
+          },
+          "numbers": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Distinct numbers, exact.",
+            "format": "int64"
+          },
+          "sims": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Distinct SIMs, estimated.",
+            "format": "int64"
+          },
+          "imeis": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Distinct IMEIs, estimated.",
+            "format": "int64"
+          }
+        },
+        "description": "A population a category is measured against."
+      },
+      "QualitySignalInfo": {
+        "required": [
+          "code",
+          "group",
+          "label",
+          "meaning",
+          "base",
+          "bindings",
+          "numbers",
+          "sims",
+          "imeis",
+          "periods",
+          "share"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Its code."
+          },
+          "group": {
+            "type": "string",
+            "description": "identifiers, sequences or lifetimes."
+          },
+          "label": {
+            "type": "string",
+            "description": "A short name."
+          },
+          "meaning": {
+            "type": "string",
+            "description": "What a binding in it is."
+          },
+          "base": {
+            "type": "string",
+            "description": "The base's code."
+          },
+          "bindings": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Bindings in it.",
+            "format": "int64"
+          },
+          "numbers": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Distinct numbers, exact.",
+            "format": "int64"
+          },
+          "sims": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Distinct SIMs, estimated.",
+            "format": "int64"
+          },
+          "imeis": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Distinct IMEIs, estimated.",
+            "format": "int64"
+          },
+          "periods": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "For a history category, how often it happened (periods of a length, redundant adds,\n            orphan removes); for current state, 0.",
+            "format": "int64"
+          },
+          "share": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Bindings over the base's bindings, 0 to 1; null when the base is empty.",
+            "format": "double"
+          }
+        },
+        "description": "One data-quality category's counts."
+      },
+      "QualitySignalsResponse": {
+        "required": [
+          "available",
+          "reason",
+          "runId",
+          "asOf",
+          "publishedAt",
+          "bases",
+          "categories"
+        ],
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "False until a run with quality categories has been published."
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Why nothing is available, for a person; null when available."
+          },
+          "runId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The run the counts come from.",
+            "format": "uint64"
+          },
+          "asOf": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Its data-through day.",
+            "format": "date"
+          },
+          "publishedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When it was published.",
+            "format": "date-time"
+          },
+          "bases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QualityBaseInfo"
+            },
+            "description": "The populations the categories are shares of: all, active, history_all."
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QualitySignalInfo"
+            },
+            "description": "Every category in the catalogue, in display order, zero when none."
+          }
+        },
+        "description": "The data-quality categories of the newest published measures run, or why there are none."
+      },
+      "RelatedKind": {
+        "enum": [
+          "Msisdn",
+          "Imsi",
+          "Imei"
+        ],
+        "description": "Which of the three identifiers a node is."
+      },
+      "RelatedNode": {
+        "required": [
+          "value",
+          "kind",
+          "bindings",
+          "activeBindings",
+          "lastConfirmed"
+        ],
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "The identifier itself."
+          },
+          "kind": {
+            "description": "What it is.",
+            "$ref": "#/components/schemas/RelatedKind"
+          },
+          "bindings": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many bindings join it to the centre.",
+            "format": "int32"
+          },
+          "activeBindings": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many of those are still in force.",
+            "format": "int32"
+          },
+          "lastConfirmed": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The day a daily file last said anything about it, or null when none ever has - meaning it is\npresent only because the initial dump listed it and nothing has removed it since.",
+            "format": "date"
+          },
+          "tac": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a handset, its type allocation code."
+          },
+          "brand": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a handset, the GSMA brand."
+          },
+          "marketingName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a handset, the product name."
+          },
+          "deviceType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a handset, the GSMA device type."
+          }
+        },
+        "description": "One identifier connected to the one being explored."
+      },
+      "RelationshipGraph": {
+        "required": [
+          "centre",
+          "kind",
+          "found",
+          "subscribers",
+          "sims",
+          "handsets",
+          "paired",
+          "withheld",
+          "truncated",
+          "elapsedMs",
+          "rowsExamined"
+        ],
+        "type": "object",
+        "properties": {
+          "centre": {
+            "type": "string",
+            "description": "The identifier that was explored."
+          },
+          "kind": {
+            "description": "What it is.",
+            "$ref": "#/components/schemas/RelatedKind"
+          },
+          "found": {
+            "type": "boolean",
+            "description": "False when the identifier is well-formed but appears nowhere."
+          },
+          "subscribers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RelatedNode"
+            },
+            "description": "Phone numbers reached from it."
+          },
+          "sims": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RelatedNode"
+            },
+            "description": "SIMs reached from it."
+          },
+          "handsets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RelatedNode"
+            },
+            "description": "Handsets reached from it."
+          },
+          "paired": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairedHandset"
+            },
+            "description": "Handsets shown to share a physical device with one of the above."
+          },
+          "withheld": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Sections the caller is not permitted to see, named rather than silently dropped - an empty\nlist and a forbidden list look identical otherwise, and the difference matters."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when the identifier has more bindings than the server will return."
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "What the query cost.",
+            "format": "int64"
+          },
+          "rowsExamined": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Rows the engine read. The number that tells an index from a scan.",
+            "format": "int64"
+          },
+          "identifiers": {
+            "description": "Whether the neighbours' identifiers are complete or redacted. The centre is always as typed.",
+            "$ref": "#/components/schemas/IdentifierVisibility"
+          }
+        },
+        "description": "Everything connected to one identifier."
+      },
+      "RiskColumnInfo": {
+        "required": [
+          "name",
+          "label",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The key in each row's values."
+          },
+          "label": {
+            "type": "string",
+            "description": "The heading, naming its unit."
+          },
+          "type": {
+            "type": "string",
+            "description": "Number, Date, Text or Tags."
+          }
+        },
+        "description": "A column of a list."
+      },
+      "RiskEntityResponse": {
+        "required": [
+          "kind",
+          "family",
+          "stored",
+          "level",
+          "assessable",
+          "reasons",
+          "values",
+          "columns",
+          "ruleSetVersion",
+          "asOf",
+          "pattern",
+          "linked"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "msisdn, imsi or imei."
+          },
+          "family": {
+            "type": "string",
+            "description": "Number, Sim or Imei."
+          },
+          "stored": {
+            "type": "boolean",
+            "description": "False when it has no stored row: every measure is below its storage floor."
+          },
+          "level": {
+            "type": "string",
+            "description": "The family's level."
+          },
+          "assessable": {
+            "type": "boolean",
+            "description": "False when most of its evidence was set aside as feed defects."
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RiskReasonInfo"
+            },
+            "description": "Every measured rule, highest level first."
+          },
+          "values": {
+            "type": "object",
+            "description": "Its stored measures, by column name."
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RiskColumnInfo"
+            },
+            "description": "Labels for those measures."
+          },
+          "ruleSetVersion": {
+            "type": "string",
+            "description": "The rule set's version."
+          },
+          "asOf": {
+            "type": "string",
+            "description": "yyyy-MM-dd the measures are as of."
+          },
+          "pattern": {
+            "type": "string",
+            "description": "The level of this entity together with those bound to it in the 30 days: SuspiciousPattern when\nrisk signals of two different families hold among them, otherwise the highest of their levels up\nto RiskSignal."
+          },
+          "linked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RiskLinkedInfo"
+            },
+            "description": "Per family, how many bound entities have stored measures, and at which levels. Names nobody."
+          }
+        },
+        "description": "One entity's risk measures and verdicts."
+      },
+      "RiskLinkedInfo": {
+        "required": [
+          "family",
+          "stored",
+          "riskSignals",
+          "anomalies"
+        ],
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "description": "Imei, Sim or Number."
+          },
+          "stored": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many have stored measures; the rest are below every floor.",
+            "format": "int32"
+          },
+          "riskSignals": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Of those, at Risk signal.",
+            "format": "int32"
+          },
+          "anomalies": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Of those, at Anomaly.",
+            "format": "int32"
+          }
+        },
+        "description": "The entities of one family bound to an entity in the 30 days, counted by level."
+      },
+      "RiskReasonInfo": {
+        "required": [
+          "rule",
+          "level",
+          "value",
+          "threshold",
+          "capped",
+          "text"
+        ],
+        "type": "object",
+        "properties": {
+          "rule": {
+            "type": "string",
+            "description": "The rule."
+          },
+          "level": {
+            "type": "string",
+            "description": "Observation, Anomaly or RiskSignal."
+          },
+          "value": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The measured value.",
+            "format": "int64"
+          },
+          "threshold": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "What it was compared with; null when the rule has none.",
+            "format": "int64"
+          },
+          "capped": {
+            "type": "boolean",
+            "description": "True when held at Anomaly."
+          },
+          "text": {
+            "type": "string",
+            "description": "The server's explanation."
+          }
+        },
+        "description": "One rule's verdict on one entity."
+      },
+      "SourceStatusInfo": {
+        "required": [
+          "source",
+          "latestBusinessDate",
+          "daysBehind",
+          "missingDays"
+        ],
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "SQM (the binding feed) or TAC (the GSMA catalogue)."
+          },
+          "latestBusinessDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The newest day imported."
+          },
+          "daysBehind": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Days between it and today.",
+            "format": "int32"
+          },
+          "missingDays": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Days the source never delivered.",
+            "format": "int32"
+          }
+        },
+        "description": "One feed's freshness."
+      },
+      "TimelineBindingInfo": {
+        "required": [
+          "msisdn",
+          "imsi",
+          "imei",
+          "tac",
+          "brand",
+          "model",
+          "active",
+          "inDump",
+          "firstSeen",
+          "firstSeenIsDumpWindow",
+          "lastChange",
+          "periods",
+          "events"
+        ],
+        "type": "object",
+        "properties": {
+          "msisdn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Null when withheld; masked without identifier.reveal."
+          },
+          "imsi": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Null when withheld; masked without identifier.reveal."
+          },
+          "imei": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Null when withheld; masked without identifier.reveal."
+          },
+          "tac": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The handset's model allocation."
+          },
+          "brand": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "GSMA brand; null when GSMA does not know the TAC."
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "GSMA marketing name; null when GSMA does not know the TAC."
+          },
+          "active": {
+            "type": "boolean",
+            "description": "Not yet removed by the feed, from current state. Not proof the SIM is in the handset today."
+          },
+          "inDump": {
+            "type": "boolean",
+            "description": "The initial dump listed it."
+          },
+          "firstSeen": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "yyyy-MM-dd: its first event, or the dump window's first day."
+          },
+          "firstSeenIsDumpWindow": {
+            "type": "boolean",
+            "description": "FirstSeen stands for the dump window."
+          },
+          "lastChange": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "yyyy-MM-dd of its last event; null when no daily file mentioned it."
+          },
+          "periods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelinePeriodInfo"
+            },
+            "description": "When the feed held it active."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineEventInfo"
+            },
+            "description": "Its events, oldest first."
+          }
+        },
+        "description": "One binding - a number, a SIM and a handset together - over time."
+      },
+      "TimelineEventInfo": {
+        "required": [
+          "date",
+          "change",
+          "effect"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "yyyy-MM-dd."
+          },
+          "change": {
+            "type": "string",
+            "description": "\"add\" or \"remove\"."
+          },
+          "effect": {
+            "type": "string",
+            "description": "\"applied\", \"redundant\" (an add of something already held) or \"orphan\" (a remove of something not held)."
+          }
+        },
+        "description": "One dated change from a daily file."
+      },
+      "TimelineGroupInfo": {
+        "required": [
+          "kind",
+          "key",
+          "drillable",
+          "tac",
+          "brand",
+          "model",
+          "bindings",
+          "active",
+          "firstSeen",
+          "firstSeenIsDumpWindow",
+          "lastChange",
+          "periods"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "msisdn, imsi or imei: what the group is of."
+          },
+          "key": {
+            "type": "string",
+            "description": "The identifier; masked without identifier.reveal."
+          },
+          "drillable": {
+            "type": "boolean",
+            "description": "The key is complete and can be opened."
+          },
+          "tac": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a handset group: its model allocation."
+          },
+          "brand": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a handset group: GSMA brand."
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a handset group: GSMA marketing name."
+          },
+          "bindings": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "How many bindings the group combines.",
+            "format": "int32"
+          },
+          "active": {
+            "type": "boolean",
+            "description": "Any of them not yet removed."
+          },
+          "firstSeen": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "yyyy-MM-dd, the earliest of its bindings."
+          },
+          "firstSeenIsDumpWindow": {
+            "type": "boolean",
+            "description": "FirstSeen stands for the dump window."
+          },
+          "lastChange": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "yyyy-MM-dd, the latest event of any of its bindings."
+          },
+          "periods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelinePeriodInfo"
+            },
+            "description": "When any of its bindings was held: overlapping and same-day periods joined."
+          }
+        },
+        "description": "Every binding sharing one related identifier - one SIM of a number, say - combined."
+      },
+      "TimelinePeriodInfo": {
+        "required": [
+          "start",
+          "startsInDump",
+          "end"
+        ],
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "string",
+            "description": "yyyy-MM-dd: the day it was added, or the initial dump window's first day."
+          },
+          "startsInDump": {
+            "type": "boolean",
+            "description": "The start is the initial dump's window, not a known day."
+          },
+          "end": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "yyyy-MM-dd: the day the feed removed it; null while it has not."
+          }
+        },
+        "description": "A stretch of time over which the feed held a binding, or any binding of a group, as active."
+      },
+      "TimelineResponse": {
+        "required": [
+          "kind",
+          "identifier",
+          "tac",
+          "brand",
+          "model",
+          "summary",
+          "groups",
+          "bindings",
+          "truncated",
+          "maxBindings",
+          "withheld",
+          "masked",
+          "dumpWindowStart",
+          "dumpWindowEnd",
+          "dataThrough",
+          "elapsedMs",
+          "rowsRead"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "msisdn, imsi or imei."
+          },
+          "identifier": {
+            "type": "string",
+            "description": "As asked, normalised."
+          },
+          "tac": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a handset: its model allocation."
+          },
+          "brand": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a handset: GSMA brand."
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For a handset: GSMA marketing name."
+          },
+          "summary": {
+            "description": "The figures for the whole timeline.",
+            "$ref": "#/components/schemas/TimelineSummaryInfo"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineGroupInfo"
+            },
+            "description": "The bindings combined by each related kind the caller may see."
+          },
+          "bindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineBindingInfo"
+            },
+            "description": "Every binding, most recently changed first."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "More bindings exist than MaxBindings; the most recent are shown."
+          },
+          "maxBindings": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The most a timeline returns.",
+            "format": "int32"
+          },
+          "withheld": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Related kinds left out because the caller may not look them up."
+          },
+          "masked": {
+            "type": "boolean",
+            "description": "Identifiers are redacted: the caller lacks identifier.reveal."
+          },
+          "dumpWindowStart": {
+            "type": "string",
+            "description": "yyyy-MM-dd, the initial dump's first day."
+          },
+          "dumpWindowEnd": {
+            "type": "string",
+            "description": "yyyy-MM-dd, its last day."
+          },
+          "dataThrough": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "yyyy-MM-dd, the latest day in the event log."
+          },
+          "elapsedMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Server time.",
+            "format": "int64"
+          },
+          "rowsRead": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Rows the server read.",
+            "format": "int64"
+          }
+        },
+        "description": "A number's, SIM's or handset's history, binding by binding and grouped by what it was bound to."
+      },
+      "TimelineSummaryInfo": {
+        "required": [
+          "firstSeen",
+          "firstSeenIsDumpWindow",
+          "lastChange",
+          "bindings",
+          "activeBindings",
+          "numbers",
+          "sims",
+          "handsets",
+          "redundantAdds",
+          "orphanRemoves",
+          "stateDisagreements"
+        ],
+        "type": "object",
+        "properties": {
+          "firstSeen": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "yyyy-MM-dd, the earliest binding."
+          },
+          "firstSeenIsDumpWindow": {
+            "type": "boolean",
+            "description": "FirstSeen stands for the dump window."
+          },
+          "lastChange": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "yyyy-MM-dd, the latest event; null when no daily file mentioned it."
+          },
+          "bindings": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Bindings in the timeline.",
+            "format": "int32"
+          },
+          "activeBindings": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Of those, not yet removed.",
+            "format": "int32"
+          },
+          "numbers": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Different numbers.",
+            "format": "int32"
+          },
+          "sims": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Different SIMs.",
+            "format": "int32"
+          },
+          "handsets": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Different IMEIs - not phones: a dual-SIM phone has two.",
+            "format": "int32"
+          },
+          "redundantAdds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Adds of bindings already held; mostly the dump being a month, not a moment.",
+            "format": "int32"
+          },
+          "orphanRemoves": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Removes of bindings not held.",
+            "format": "int32"
+          },
+          "stateDisagreements": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Bindings whose events end in a different state from current state. Zero\n            unless a day is part way through being imported.",
+            "format": "int32"
+          }
+        },
+        "description": "What the whole timeline says."
+      },
+      "TokenError": {
+        "required": [
+          "error",
+          "error_description"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "invalid_request, invalid_client, invalid_scope or unsupported_grant_type."
+          },
+          "error_description": {
+            "type": "string",
+            "description": "Why, in a sentence."
+          }
+        },
+        "description": "A refused token request, as RFC 6749 §5.2 writes it."
+      },
+      "TokenResponse": {
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "scope"
+        ],
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "The bearer token."
+          },
+          "token_type": {
+            "type": "string",
+            "description": "Always `Bearer`."
+          },
+          "expires_in": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Seconds until it stops working.",
+            "format": "int32"
+          },
+          "scope": {
+            "type": "string",
+            "description": "The scopes it carries, space-separated."
+          }
+        },
+        "description": "An access token, as RFC 6749 §5.1 writes it."
+      }
+    },
+    "securitySchemes": {
+      "oauth2": {
+        "type": "oauth2",
+        "description": "A registered system's id and secret for a 15-minute bearer token (RFC 6749 §4.4).",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "/api/integration/v1/oauth/token",
+            "scopes": {
+              "events.read": "Read PI's event feed.",
+              "events.write": "Deliver declared events - SIM swaps, activations, deactivations - to PI.",
+              "facts.read": "Read the device and SIM facts a policy decision is written against.",
+              "identifiers.reveal": "Receive IMSIs, ICCIDs and IMEIs in full; without it they are masked.",
+              "inventory.read": "Look up numbers, SIMs (IMSI or ICCID) and handsets: their bindings, relationships, history and device models.",
+              "inventory.sync": "Read each day's binding changes, to keep a copy in step.",
+              "quality.read": "Read data-quality figures and the state of the feeds."
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Integration: authentication"
+    },
+    {
+      "name": "Integration: inventory"
+    },
+    {
+      "name": "Integration: events"
+    },
+    {
+      "name": "Integration: status and quality"
+    }
+  ]
+}
