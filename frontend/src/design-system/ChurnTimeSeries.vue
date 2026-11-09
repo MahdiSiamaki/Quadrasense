@@ -11,7 +11,8 @@ import {
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { formatCompact, formatFull } from '@/lib/format'
-import { useTheme } from '@/lib/theme'
+import { useChartRevision } from '@/lib/appearance'
+import { setThemedOption } from '@/lib/chart-theme'
 import { chartColor } from '@/lib/chart-colors'
 import { fillCalendar, isMissing } from '@/lib/calendar'
 import { feedQualityMarkArea, feedQualityTooltip } from '@/lib/feed-quality-bands'
@@ -64,7 +65,7 @@ const props = withDefaults(
 
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
-const { isDark } = useTheme()
+const revision = useChartRevision()
 
 /*
   Tokens are oklch, and ECharts needs a colour it can compute with, not only paint. Reading the
@@ -107,7 +108,8 @@ function render() {
     )
   }
 
-  chart.value.setOption(
+  setThemedOption(
+    chart.value,
     {
       animation: false,
       legend: { top: 0, right: 0, textStyle: { color: text, fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
@@ -166,7 +168,7 @@ onBeforeUnmount(() => {
 })
 
 watch(() => [props.data, props.flagged, props.series, props.chart, props.zoomStart], render, { deep: true })
-watch(isDark, () => requestAnimationFrame(render))
+watch(revision, () => requestAnimationFrame(render))
 </script>
 
 <template>

@@ -1,0 +1,14 @@
+{
+  "theme": { "default": "system", "values": ["system", "light", "dark"] },
+  "fontFamily": { "default": "system", "values": ["system", "inter", "plex", "atkinson"] },
+  "fontSize": { "default": "medium", "values": ["small", "medium", "large", "larger"] },
+  "fontWeight": { "default": "regular", "values": ["light", "regular", "medium"] },
+  "lineSpacing": { "default": "normal", "values": ["tight", "normal", "relaxed"] },
+  "density": { "default": "normal", "values": ["compact", "normal", "comfortable"] },
+  "accent": {
+    "default": "blue",
+    "values": ["blue", "sky", "teal", "violet", "magenta", "slate"]
+  },
+  "corners": { "default": "normal", "values": ["square", "normal", "round"] },
+  "motion": { "default": "system", "values": ["system", "full", "reduced", "none"] }
+}

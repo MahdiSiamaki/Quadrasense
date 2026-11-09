@@ -211,6 +211,8 @@ see ADR-011's amendment.
   honour), never on the close button, which is 32×32.
 - **A password field can be revealed** (`TextField`'s `revealable`): a real button in the tab order
   that says what it will do, back to hidden as soon as the field is cleared.
+- **Charts draw in the person's typeface**, which they did not before: with no `fontFamily` set, ECharts used
+  a generic sans-serif whatever the page was in.
 - **A field that arrives with the next step takes focus on mount** (`autofocus` on `TextField`). The
   attribute alone works once per document, so the second step of a form left focus on the body.
 - **What exists only in a `title` is out of reach of a phone and a keyboard.** A KPI card's
@@ -218,6 +220,25 @@ see ADR-011's amendment.
   over, not inside, because a card that grows stretches its whole row.
 - **A focus ring inside a clipping frame is drawn inside** (`focus-visible:-outline-offset-2`):
   segmented controls, the user menu's items.
+
+## What a person can change
+
+Theme, typeface, text size and weight, line spacing, density of tables and forms, accent, corners and
+animation, at `/settings/appearance`. ADR-023 has the reasoning; what a new page needs to know is short.
+
+- **Use the tokens and it follows.** Each setting is an attribute on `<html>` that changes tokens
+  (`appearance.css`), so nothing in a component mentions them. A size written as a literal does not grow
+  with the setting, and `appearanceReach.spec.ts` fails on one.
+- **A chart sets its option through `setThemedOption`** and redraws on `useChartRevision`. A canvas is out of
+  CSS's reach: the typeface, the sizes and the corners are handed to it there. Sizes in a chart's option
+  stay plain numbers, written for the default.
+- **`motion-safe:` and `motion-reduce:` are ours** (`tokens.css`): they read `data-motion`, which already
+  holds the person's setting and the system's preference, and nothing else may read
+  `prefers-reduced-motion`.
+- **Density reaches `table`, `form` and fields, through `--spacing`.** Padding in one of those has to come
+  from a spacing utility to follow it.
+- **An accent is six fixed colours, none red, amber or green.** A new one needs both its blocks, and
+  `accentContrast.spec.ts` computes its contrast from the stylesheet.
 
 ## The pages before sign-in
 

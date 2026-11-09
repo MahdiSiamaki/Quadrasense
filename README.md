@@ -110,10 +110,33 @@ left out of every count.
 #### Identity and audit
 
 Local sign-in, server-side sessions, permission-based RBAC, and an audit trail PostgreSQL itself keeps
-append-only. A test enumerates the router to prove no endpoint escapes a permission. Password recovery
-that cannot be used to find out whether an account exists, and two-step sign-in with an authenticator.
+append-only. A test enumerates the router to prove no endpoint escapes a permission.
 
-[Identity and access](docs/architecture/12-identity-and-access.md) · [ADR-006](docs/adr/ADR-006-authentication-and-access-control.md) · [ADR-022](docs/adr/ADR-022-account-recovery-and-two-step.md)
+[Identity and access](docs/architecture/12-identity-and-access.md) · [ADR-006](docs/adr/ADR-006-authentication-and-access-control.md)
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+#### Getting back in
+
+Password recovery by a code to an email address or phone number proved beforehand, which cannot be
+used to find out whether an account exists. Two-step sign-in with an authenticator app, which a role
+can demand. Remember me, and every device signed in, with a way to end them.
+
+[Identity and access](docs/architecture/12-identity-and-access.md) · [ADR-022](docs/adr/ADR-022-account-recovery-and-two-step.md)
+
+</td>
+<td valign="top">
+
+#### Each person's look
+
+Theme, typeface, text size and weight, line spacing, density, accent, corners and animation, saved to
+the account and applied to every page and chart at once. Every accent is held to WCAG AA by a test
+that computes it from the stylesheet.
+
+[UI design system](docs/architecture/16-ui-design-system.md) · [ADR-023](docs/adr/ADR-023-appearance-settings.md)
 
 </td>
 </tr>
@@ -329,6 +352,7 @@ chosen because of that is [listed](docs/operations/dedicated-hardware.md), to re
 | [ADR-020](docs/adr/ADR-020-rows-with-no-handset.md) | Rows with no handset stay stored and are left out of every count | Accepted |
 | [ADR-021](docs/adr/ADR-021-idle-lanes.md) | The worker runs what does not conflict in lanes, as many as the engine reports room for, with a brake, and gives way to people | Accepted |
 | [ADR-022](docs/adr/ADR-022-account-recovery-and-two-step.md) | Recovery by a code to a proved contact, and an authenticator as the second step | Accepted |
+| [ADR-023](docs/adr/ADR-023-appearance-settings.md) | Each person's look: settings as tokens, steps not free values, one contract with the API, on every page and chart | Accepted |
 
 Every one of these was decided against measurement on the real dataset, not on reputation. Where a claim
 appears in these documents, the number behind it is there too.

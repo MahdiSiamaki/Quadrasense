@@ -7,7 +7,8 @@ import { CanvasRenderer } from 'echarts/renderers'
 import type { ModelArrivals } from '@/api/modelArrivals'
 import { chartColor } from '@/lib/chart-colors'
 import { formatCompact, formatDate, formatFull, formatMonth } from '@/lib/format'
-import { useTheme } from '@/lib/theme'
+import { useChartRevision } from '@/lib/appearance'
+import { setThemedOption } from '@/lib/chart-theme'
 import { tooltipBounds } from '@/lib/chart-tooltip'
 
 echarts.use([BarChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
@@ -21,7 +22,7 @@ const props = withDefaults(defineProps<{ data: ModelArrivals; height?: string }>
 
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
-const { isDark } = useTheme()
+const revision = useChartRevision()
 
 function label(iso: string): string {
   return props.data.grain === 'month' ? formatMonth(iso) : formatDate(iso)
@@ -33,7 +34,8 @@ function render() {
   const border = chartColor('--c-border')
   const periods = props.data.periods
 
-  chart.value.setOption(
+  setThemedOption(
+    chart.value,
     {
       animation: false,
       legend: { top: 0, right: 0, textStyle: { color: chartColor('--c-text-secondary'), fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
@@ -105,7 +107,7 @@ onBeforeUnmount(() => {
   chart.value = null
 })
 watch(() => props.data, render, { deep: true })
-watch(isDark, () => requestAnimationFrame(render))
+watch(revision, () => requestAnimationFrame(render))
 </script>
 
 <template>

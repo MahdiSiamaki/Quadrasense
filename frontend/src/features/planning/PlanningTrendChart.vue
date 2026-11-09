@@ -5,7 +5,8 @@ import { LineChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { formatCompact, formatFull } from '@/lib/format'
-import { useTheme } from '@/lib/theme'
+import { useChartRevision } from '@/lib/appearance'
+import { setThemedOption } from '@/lib/chart-theme'
 import { chartColor } from '@/lib/chart-colors'
 import { tooltipBounds } from '@/lib/chart-tooltip'
 
@@ -33,7 +34,7 @@ const props = withDefaults(
 
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
-const { isDark } = useTheme()
+const revision = useChartRevision()
 
 function render() {
   if (!chart.value) return
@@ -42,7 +43,8 @@ function render() {
   const muted = chartColor('--c-text-muted')
   const border = chartColor('--c-border')
 
-  chart.value.setOption(
+  setThemedOption(
+    chart.value,
     {
       animation: false,
       legend: { top: 0, right: 0, textStyle: { color: text, fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
@@ -105,7 +107,7 @@ onBeforeUnmount(() => {
 })
 
 watch(() => [props.points, props.series, props.unit], render, { deep: true })
-watch(isDark, () => requestAnimationFrame(render))
+watch(revision, () => requestAnimationFrame(render))
 </script>
 
 <template>

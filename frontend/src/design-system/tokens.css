@@ -1,6 +1,14 @@
 @import 'tailwindcss';
 
 /*
+  Whether movement is wanted comes from the person's animation setting, which has already taken the
+  operating system's preference into account when it says "system" (lib/appearance.ts). The stock
+  variants read only the operating system, so "Reduced" here would change nothing.
+*/
+@custom-variant motion-safe (&:where(:root[data-motion='full'] *));
+@custom-variant motion-reduce (&:where(:root:not([data-motion='full']) *));
+
+/*
   Design tokens.
 
   One principle drives everything below: this is a data product, so the interface
@@ -10,7 +18,8 @@
 
   Light and dark are defined as the same token names with different values, so
   every component is written once and theme support is a variable swap rather
-  than a parallel stylesheet.
+  than a parallel stylesheet. What a person can change for themselves works the
+  same way: appearance.css changes these tokens and nothing else.
 */
 
 @theme {
@@ -23,15 +32,18 @@
     Arial, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', Menlo, Consolas, monospace;
 
-  /* A deliberately short scale. More sizes means more inconsistency. */
-  --text-2xs: 0.6875rem;   /* 11px - table meta, axis labels */
-  --text-xs: 0.75rem;      /* 12px - secondary labels */
-  --text-sm: 0.8125rem;    /* 13px - body default in dense UI */
-  --text-base: 0.875rem;   /* 14px - body in comfortable UI */
-  --text-lg: 1rem;         /* 16px - section headings */
-  --text-xl: 1.25rem;      /* 20px - page headings */
-  --text-2xl: 1.75rem;     /* 28px - KPI values */
-  --text-3xl: 2.25rem;     /* 36px - hero KPI */
+  /*
+    A deliberately short scale. More sizes means more inconsistency. The sizes are at the default
+    text size; --text-scale is the person's setting (appearance.css).
+  */
+  --text-2xs: calc(0.6875rem * var(--text-scale));   /* 11px - table meta, axis labels */
+  --text-xs: calc(0.75rem * var(--text-scale));      /* 12px - secondary labels */
+  --text-sm: calc(0.8125rem * var(--text-scale));    /* 13px - body default in dense UI */
+  --text-base: calc(0.875rem * var(--text-scale));   /* 14px - body in comfortable UI */
+  --text-lg: calc(1rem * var(--text-scale));         /* 16px - section headings */
+  --text-xl: calc(1.25rem * var(--text-scale));      /* 20px - page headings */
+  --text-2xl: calc(1.75rem * var(--text-scale));     /* 28px - KPI values */
+  --text-3xl: calc(2.25rem * var(--text-scale));     /* 36px - hero KPI */
 
   /* --------------------------------------------------------------- space */
   /* 4px base. Every margin and padding in the app is a multiple of this. */
@@ -81,6 +93,35 @@
 */
 :root {
   color-scheme: light;
+
+  /*
+    What a person's settings turn (appearance.css). Here so that everything has a value when they
+    have changed nothing. The line heights are Tailwind's, each multiplied by the setting.
+  */
+  --text-scale: 1;
+  --leading-scale: 1;
+  --font-weight-body: 400;
+
+  /*
+    The categorical colours in their order. Each theme sets the bases; an accent may swap two, so
+    that the first series takes the accent's colour (appearance.css).
+  */
+  --viz-1: var(--viz-base-1);
+  --viz-2: var(--viz-base-2);
+  --viz-3: var(--viz-base-3);
+  --viz-4: var(--viz-base-4);
+  --viz-5: var(--viz-base-5);
+  --viz-6: var(--viz-base-6);
+  --viz-7: var(--viz-base-7);
+  --viz-8: var(--viz-base-8);
+
+  --text-xs--line-height: calc(1 / 0.75 * var(--leading-scale));
+  --text-sm--line-height: calc(1.25 / 0.875 * var(--leading-scale));
+  --text-base--line-height: calc(1.5 / 1 * var(--leading-scale));
+  --text-lg--line-height: calc(1.75 / 1.125 * var(--leading-scale));
+  --text-xl--line-height: calc(1.75 / 1.25 * var(--leading-scale));
+  --text-2xl--line-height: calc(2 / 1.5 * var(--leading-scale));
+  --text-3xl--line-height: calc(2.25 / 1.875 * var(--leading-scale));
 
   /* Surfaces, from furthest back to nearest front. */
   --c-canvas: oklch(98.4% 0.002 250);
@@ -208,28 +249,28 @@
   each ground.
 */
 :root {
-  --viz-1: oklch(58% 0.16 264);
-  --viz-2: oklch(62% 0.15 190);
-  --viz-3: oklch(64% 0.15 145);
-  --viz-4: oklch(70% 0.14 95);
-  --viz-5: oklch(65% 0.16 55);
-  --viz-6: oklch(60% 0.17 20);
-  --viz-7: oklch(57% 0.16 330);
-  --viz-8: oklch(55% 0.14 295);
+  --viz-base-1: oklch(58% 0.16 264);
+  --viz-base-2: oklch(62% 0.15 190);
+  --viz-base-3: oklch(64% 0.15 145);
+  --viz-base-4: oklch(70% 0.14 95);
+  --viz-base-5: oklch(65% 0.16 55);
+  --viz-base-6: oklch(60% 0.17 20);
+  --viz-base-7: oklch(57% 0.16 330);
+  --viz-base-8: oklch(55% 0.14 295);
   /* The "no data" grey. Deliberately desaturated so the ~7% unknown-device
      bucket reads as absence of information rather than as a category. */
   --viz-null: oklch(70% 0.008 260);
 }
 
 :root[data-theme='dark'] {
-  --viz-1: oklch(70% 0.15 264);
-  --viz-2: oklch(73% 0.14 190);
-  --viz-3: oklch(75% 0.14 145);
-  --viz-4: oklch(80% 0.13 95);
-  --viz-5: oklch(75% 0.15 55);
-  --viz-6: oklch(70% 0.16 20);
-  --viz-7: oklch(70% 0.15 330);
-  --viz-8: oklch(68% 0.14 295);
+  --viz-base-1: oklch(70% 0.15 264);
+  --viz-base-2: oklch(73% 0.14 190);
+  --viz-base-3: oklch(75% 0.14 145);
+  --viz-base-4: oklch(80% 0.13 95);
+  --viz-base-5: oklch(75% 0.15 55);
+  --viz-base-6: oklch(70% 0.16 20);
+  --viz-base-7: oklch(70% 0.15 330);
+  --viz-base-8: oklch(68% 0.14 295);
   --viz-null: oklch(48% 0.01 260);
 }
 
@@ -261,7 +302,8 @@ body {
   color: var(--c-text);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  line-height: 1.5;
+  font-weight: var(--font-weight-body);
+  line-height: calc(1.5 * var(--leading-scale));
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -315,10 +357,8 @@ table,
   motion-reduce: on a bar, a knob or a spinner - rather than cut by a rule here, which could not
   tell a fade from a slide and used to remove both.
 */
-@media (prefers-reduced-motion: reduce) {
-  * {
-    scroll-behavior: auto !important;
-  }
+:root:not([data-motion='full']) * {
+  scroll-behavior: auto !important;
 }
 
 /*

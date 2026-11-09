@@ -14,6 +14,10 @@
     <EmbeddedResource Include="..\..\..\frontend\src\features\dashboard\registry\widget-contract.json"
                       LogicalName="Sqm.Application.Dashboards.widget-contract.json"
                       Link="Dashboards\widget-contract.json" />
+    <!-- The same arrangement for the appearance settings (ADR-023). -->
+    <EmbeddedResource Include="..\..\..\frontend\src\lib\appearance-contract.json"
+                      LogicalName="Sqm.Application.Identity.appearance-contract.json"
+                      Link="Identity\appearance-contract.json" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -182,6 +182,7 @@ async function submit() {
         <div v-if="channels.length > 1" class="flex flex-col gap-1">
           <span class="text-xs font-medium text-[var(--c-text-secondary)]">Send the code by</span>
           <SegmentedControl
+            class="self-start"
             :model-value="channel"
             :options="channels"
             label="Send the code by"
@@ -190,6 +191,9 @@ async function submit() {
         </div>
 
         <FormMessage v-if="sendFailure" tone="warning">{{ sendFailure }}</FormMessage>
+        <FormMessage v-else-if="options.isError.value" tone="warning">
+          Could not reach the server. Check your connection and try again.
+        </FormMessage>
 
         <Button
           type="submit"

@@ -10,7 +10,7 @@ import { useTheme } from '@/lib/theme'
  * theme in force now; the label says what pressing it does.
  *
  * Still a button to the browser - focusable, announced, operated by Enter and Space - only no
- * longer drawn as one. Motion is dropped under prefers-reduced-motion; the icon still changes.
+ * longer drawn as one. Motion is dropped with the person's animation setting; the icon still changes.
  *
  * Colours come from the design tokens through currentColor, so it needs no chart-colors
  * resolution: this is CSS painting, not a canvas.
@@ -123,11 +123,9 @@ const rays = Array.from({ length: 8 }, (_, i) => i * 45)
 }
 
 /* Reduced motion: the drawing changes without turning or growing; the colour still fades. */
-@media (prefers-reduced-motion: reduce) {
-  .disc,
-  .bite,
-  .rays {
-    transition: opacity 200ms ease;
-  }
+:root:not([data-motion='full']) .disc,
+:root:not([data-motion='full']) .bite,
+:root:not([data-motion='full']) .rays {
+  transition: opacity 200ms ease;
 }
 </style>

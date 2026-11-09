@@ -1,0 +1,11 @@
+/*
+  The typefaces a person can choose, carried in the image: nothing is fetched from outside (MCI's
+  red line 1-3 row 4, and the Content-Security-Policy).
+
+  A browser downloads a face only when text on the page uses it, and each of these is split by
+  script, so someone on the system font, which is the default, downloads none of them, and someone
+  on Inter downloads its Latin file and nothing else. All three are under the SIL Open Font License.
+*/
+@import '@fontsource-variable/inter/wght.css';
+@import '@fontsource-variable/ibm-plex-sans/wght.css';
+@import '@fontsource-variable/atkinson-hyperlegible-next/wght.css';

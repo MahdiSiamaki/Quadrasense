@@ -7,7 +7,8 @@ import { CanvasRenderer } from 'echarts/renderers'
 import type { RiskDistribution } from '@/api/risk'
 import { chartColor } from '@/lib/chart-colors'
 import { formatCompact, formatFull } from '@/lib/format'
-import { useTheme } from '@/lib/theme'
+import { useChartRevision } from '@/lib/appearance'
+import { setThemedOption } from '@/lib/chart-theme'
 import { tooltipBounds } from '@/lib/chart-tooltip'
 
 echarts.use([BarChart, GridComponent, LegendComponent, MarkAreaComponent, TooltipComponent, CanvasRenderer])
@@ -34,7 +35,7 @@ const props = withDefaults(
 
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
-const { isDark } = useTheme()
+const revision = useChartRevision()
 
 const labels = computed(() =>
   props.data.buckets.map((b) =>
@@ -80,7 +81,8 @@ function render() {
         }
       : undefined
 
-  chart.value.setOption(
+  setThemedOption(
+    chart.value,
     {
       animation: false,
       legend: both
@@ -176,7 +178,7 @@ onBeforeUnmount(() => {
 })
 
 watch(() => [props.data, props.values, props.showThreshold], render, { deep: true })
-watch(isDark, () => requestAnimationFrame(render))
+watch(revision, () => requestAnimationFrame(render))
 </script>
 
 <template>
