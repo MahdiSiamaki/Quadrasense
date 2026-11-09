@@ -140,6 +140,20 @@ that computes it from the stylesheet.
 
 </td>
 </tr>
+<tr>
+<td colspan="2" valign="top">
+
+#### The estate's door into PI
+
+An integration API for the systems around it - Lodestone first, Tessera for its facts: look up a number, SIM,
+ICCID or handset, its history and what CRM declared about it, each day's changes page by page, and an event
+feed Lodestone pulls. OAuth 2.0 client credentials and scopes, identifiers only in request bodies, and an
+audit trail that never holds one. A day's changes read at 1,000 rows in 115-244 ms.
+
+[Catalogue](docs/integration/PI-API-CATALOG.md) · [Integration matrix](docs/integration/PI-INTEGRATION-MATRIX.md) · [Architecture](docs/integration/PI-API-ARCHITECTURE.md) · [ADR-024](docs/adr/ADR-024-integration-api.md)
+
+</td>
+</tr>
 </table>
 
 ### The identifiers the name points at
@@ -321,10 +335,11 @@ chosen because of that is [listed](docs/operations/dedicated-hardware.md), to re
 | [Data profiling report](docs/discovery/01-data-profiling-report.md) | what the data actually is, measured |
 | [Running the system](docs/operations/running-the-system.md) | setup, every batch command, the tests |
 | [Deployment](docs/operations/deployment/) | the containers, the department VM, MCI's OpenShift, the red lines, CI/CD |
+| [Integration](docs/integration/) | the API the estate's systems use: catalogue, matrix and gap analysis, architecture, OpenAPI |
 | [Backlog](docs/backlog.md) | suggestions not built yet, with their evidence and cost |
 
 <details>
-<summary><b>Architecture decisions</b>: twenty-one ADRs, each with the evidence in it</summary>
+<summary><b>Architecture decisions</b>: twenty-four ADRs, each with the evidence in it</summary>
 
 <br>
 
@@ -353,6 +368,7 @@ chosen because of that is [listed](docs/operations/dedicated-hardware.md), to re
 | [ADR-021](docs/adr/ADR-021-idle-lanes.md) | The worker runs what does not conflict in lanes, as many as the engine reports room for, with a brake, and gives way to people | Accepted |
 | [ADR-022](docs/adr/ADR-022-account-recovery-and-two-step.md) | Recovery by a code to a proved contact, and an authenticator as the second step | Accepted |
 | [ADR-023](docs/adr/ADR-023-appearance-settings.md) | Each person's look: settings as tokens, steps not free values, one contract with the API, on every page and chart | Accepted |
+| [ADR-024](docs/adr/ADR-024-integration-api.md) | The estate's systems reach PI through an integration API: OAuth 2.0 client credentials issued by PI, scopes, a pulled event feed, declared events in | Accepted |
 
 Every one of these was decided against measurement on the real dataset, not on reputation. Where a claim
 appears in these documents, the number behind it is there too.

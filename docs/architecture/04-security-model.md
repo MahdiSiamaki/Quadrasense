@@ -152,6 +152,15 @@ proved beforehand, in the terms MCI sets for one-time passwords, and the endpoin
 looks at no account: the work happens on a queue after the response has gone. A reset ends every
 session and signs nobody in, so it cannot step around the second step.
 
+**Systems use the integration API, never a session** (ADR-024). OAuth 2.0 client credentials issued by PI:
+a registered client's 256-bit secret for a 15-minute opaque bearer token, both stored as SHA-256 only;
+scopes in place of permissions, so a session cannot satisfy an integration policy nor a token a UI one;
+deactivation and rotation end every token in the same transaction; 30 token requests a minute per
+address and 600 requests a minute per client; identifiers in request bodies only; without
+`identifiers.reveal`, every identifier in an answer is masked but the one sent. Every token issued or
+refused, every read and every denial is audited by client, kind and count - never an identifier or a
+secret. PI holds no key value, and no integration contract may even carry a field named like one.
+
 ## 5. Upload security
 
 File upload is the largest attack surface, because it accepts bulk data from outside.
