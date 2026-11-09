@@ -50,7 +50,7 @@ sequenceDiagram
     participant P as PI
     participant DB as PostgreSQL
     L->>P: POST /oauth/token (Basic client_id:secret, grant_type=client_credentials)
-    P->>DB: client by id; SHA-256(secret) = stored hash? active? scopes held?
+    P->>DB: client by id, SHA-256 of the secret against the stored hash, active, scopes held
     P->>DB: insert SHA-256(token), scopes, expires_at = now + 15 min
     P-->>L: { access_token, token_type: Bearer, expires_in: 900, scope }
     L->>P: POST /inventory/lookup (Authorization: Bearer token)
@@ -123,7 +123,7 @@ sequenceDiagram
     participant W as Import worker
     participant DB as PostgreSQL
     participant L as Lodestone
-    W->>DB: BEGIN; complete the job; pg_advisory_xact_lock(outbox); INSERT outbox_event; COMMIT
+    W->>DB: one transaction: complete the job, take the outbox lock, insert the event, commit
     loop every few minutes
         L->>DB: GET /events?after=cursor (through the API)
         DB-->>L: events with sequence > cursor, oldest first
