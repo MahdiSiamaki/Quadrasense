@@ -12,6 +12,7 @@
 import { computed } from 'vue'
 import type { DashboardSnapshot } from '@/api/dashboards'
 import { formatDateTime } from '@/lib/format'
+import { EXPORT_PIXEL_RATIO, provideReportMode } from '@/lib/report-mode'
 import { getWidget } from '../registry'
 import { effectiveLens, rangeLabel } from '../composables/lens'
 import { readingOrder } from '../composables/layout'
@@ -31,7 +32,16 @@ const props = defineProps<{
   /** Show a widget that could not be prepared as a card saying why, rather than leave it out. */
   showUnavailable: boolean
   page?: { index: number; count: number }
+  /**
+   * What the report is drawn for. An image is 1200px wide with a margin; a printout is the width of an A4
+   * landscape page inside its 12mm margins (273mm, 1031px), less a little, so the charts are drawn at the
+   * size they print - a canvas does not redraw when the browser lays the page out for paper.
+   */
+  variant?: 'image' | 'print'
 }>()
+
+// Every chart below draws for a copy: every day it was given, no zoom, the canvas at the capture's ratio.
+provideReportMode({ pixelRatio: EXPORT_PIXEL_RATIO })
 
 const byId = computed(() => new Map(props.snapshot.widgets.map((w) => [w.id, w])))
 
@@ -75,7 +85,10 @@ function height(widget: WidgetInstance) {
 </script>
 
 <template>
-  <article class="report-view flex w-[1200px] flex-col gap-4 bg-[var(--c-surface)] p-8 text-[var(--c-text)]">
+  <article
+    class="report-view flex flex-col gap-4 bg-[var(--c-surface)] text-[var(--c-text)]"
+    :class="variant === 'print' ? 'w-[1024px] p-0' : 'w-[1200px] p-8'"
+  >
     <header class="flex flex-col gap-1 border-b pb-3">
       <h1 class="text-xl font-semibold tracking-tight">{{ name }}</h1>
       <p class="text-xs text-[var(--c-text-secondary)]">
@@ -94,6 +107,7 @@ function height(widget: WidgetInstance) {
         :key="widget.id"
         class="report-card flex min-w-0 flex-col overflow-hidden rounded-[var(--radius-lg)] border"
         :style="{ gridColumn: `span ${widget.layout.w} / span ${widget.layout.w}` }"
+        :data-widget-id="widget.id"
       >
         <header class="border-b px-4 py-2">
           <h2 class="text-sm font-semibold">{{ widget.title ?? getWidget(widget.type)?.name ?? widget.type }}</h2>
@@ -103,7 +117,12 @@ function height(widget: WidgetInstance) {
             {{ data!.notes.join(' ') }}
           </p>
         </header>
-        <div class="min-h-0 flex-1 px-4 py-3" :style="{ height: height(widget) }">
+        <!--
+          The grid's height is kept, not overridden: as min-h-0 flex-1 the body's basis was 0, its height was
+          ignored, and a chart drawn at height 100% of nothing was 100px of axis (2026-11-09). It grows past
+          that height when its content needs more (fitReport), and fills a row a taller neighbour stretched.
+        -->
+        <div class="flex-[1_0_auto] px-4 py-3" :style="{ height: height(widget) }" data-report-body>
           <p v-if="data!.status !== 'ok'" class="text-sm text-[var(--c-text-secondary)]">{{ data!.reason ?? STATUS_WORDS[data!.status] }}</p>
           <WidgetErrorBoundary v-else-if="getWidget(widget.type)">
             <component
@@ -123,6 +142,32 @@ function height(widget: WidgetInstance) {
 
 <style>
 /*
+  A report's colours are its data: a bar, a share, a legend swatch is a background. Browsers leave
+  backgrounds out of a printout unless the person ticks "Background graphics", which hid every bar of the
+  report (2026-11-09); this keeps them.
+*/
+.report-view {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+/*
+  Nothing in a report can be hovered, so a name cut short with an ellipsis could never be read whole: it
+  wraps instead. A chart is kept tall enough to read whatever its card's footnotes take, and its card
+  grows instead (fitReport).
+*/
+.report-view .truncate {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+
+.report-view [_echarts_instance_] {
+  min-height: 10rem;
+}
+
+/*
   Printing: only the report, on white, each card whole on one page where it fits. Unscoped on
   purpose - it has to reach <body>'s other children. Scoped to the print medium, so the screen is
   untouched.
@@ -131,15 +176,20 @@ function height(widget: WidgetInstance) {
   body > *:not(.print-host) {
     display: none !important;
   }
+  /* Paper is white: with background graphics on, the app's canvas grey printed under the last card. */
+  html,
+  body {
+    background: white !important;
+  }
   .print-host {
     position: static !important;
     inset: auto !important;
     opacity: 1 !important;
   }
-  .report-view {
-    width: 100% !important;
-    padding: 0 !important;
-  }
+  /*
+    The report keeps the width it was drawn at (the print variant, 1024px): stretched to the page, its
+    canvases - drawn before printing, and never redrawn for paper - were cut at the card's right edge.
+  */
   .report-card {
     break-inside: avoid;
   }

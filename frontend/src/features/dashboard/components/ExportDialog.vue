@@ -20,8 +20,10 @@ import Button from '@/design-system/Button.vue'
 import Modal from '@/design-system/Modal.vue'
 import SegmentedControl from '@/design-system/SegmentedControl.vue'
 import { clearChartColorCache } from '@/lib/chart-colors'
+import { EXPORT_PIXEL_RATIO } from '@/lib/report-mode'
 import { getWidget } from '../registry'
 import { readingOrder } from '../composables/layout'
+import { csvMessage, fitReport, measureRows, splitRows } from '../composables/reportFit'
 import type { DashboardDefinition, DashboardLens } from '../types/definition'
 import { problemText } from './apiProblem'
 import ReportView from './ReportView.vue'
@@ -106,7 +108,7 @@ async function prepare() {
         abort.signal,
       )
       saveFile(file, selected.value.length === 1 ? `${slug(props.name)}-${slug(title(selected.value[0]!))}.csv` : `${slug(props.name)}.zip`)
-      message.value = selected.value.length === 1 ? 'The CSV was downloaded.' : 'A ZIP with one CSV per widget was downloaded; about.txt says what each file is.'
+      message.value = csvMessage(selected.value.length, file.included ?? null, file.requested ?? null)
       phase.value = 'done'
     } catch (e) {
       error.value = e
@@ -141,25 +143,16 @@ const rendering = ref(false)
 const pages = ref<string[][]>([])
 const host = ref<HTMLElement | null>(null)
 
-/** Pages of widgets short enough for one PNG each: a canvas taller than ~16k px fails in browsers. */
-function paginate(ids: string[]): string[][] {
-  const MAX_PAGE_PX = 6500
-  const out: string[][] = []
-  let page: string[] = []
-  let height = 0
-  for (const w of readingOrder(widgets.value.filter((x) => ids.includes(x.id)))) {
-    const h = Math.max(3, w.layout.h) * 40 + 80
-    if (page.length && height + h > MAX_PAGE_PX) {
-      out.push(page)
-      page = []
-      height = 0
-    }
-    page.push(w.id)
-    // Cards side by side share a row; counting each full height errs towards smaller pages.
-    height += w.layout.w >= 12 ? h : h / 2
-  }
-  if (page.length) out.push(page)
-  return out
+/**
+ * The tallest an image page may be, in CSS pixels. Captured at twice that, it stays under the 16,384 pixels a
+ * canvas may have; past that html-to-image shrinks the whole image to fit, quietly blurring every page.
+ */
+const MAX_PAGE_PX = 7000
+
+/** Lays the rendered report out for a copy that cannot scroll, then waits for the charts to redraw at their new sizes. */
+async function fitAndSettle() {
+  if (host.value) fitReport(host.value)
+  await settled()
 }
 
 /** The report is drawn light, whatever the app's theme, then the theme is put back. */
@@ -205,6 +198,7 @@ async function produce() {
         pages.value = [ids]
         rendering.value = true
         await settled()
+        await fitAndSettle()
         await new Promise<void>((resolve) => {
           window.addEventListener('afterprint', () => resolve(), { once: true })
           window.print()
@@ -212,12 +206,25 @@ async function produce() {
           setTimeout(resolve, 60_000)
         })
       } else {
-        pages.value = paginate(ids)
+        // Drawn whole first, so the pages are cut where the cards really end rather than where the grid
+        // said they would: a card grows with its content, and the estimate was what kept a page in bounds.
+        pages.value = [readingOrder(widgets.value.filter((w) => ids.includes(w.id))).map((w) => w.id)]
         rendering.value = true
         await settled()
+        await fitAndSettle()
+        const whole = host.value?.querySelector<HTMLElement>('.report-view')
+        if (whole) {
+          const header = whole.querySelector<HTMLElement>('header')?.getBoundingClientRect().height ?? 0
+          const split = splitRows(measureRows(whole), header + 64 + 16, 16, MAX_PAGE_PX)
+          if (split.length > 1) {
+            pages.value = split
+            await settled()
+            await fitAndSettle()
+          }
+        }
         const nodes = [...(host.value?.querySelectorAll<HTMLElement>('.report-view') ?? [])]
         for (const [index, node] of nodes.entries()) {
-          const blob = await toBlob(node, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true })
+          const blob = await toBlob(node, { pixelRatio: EXPORT_PIXEL_RATIO, backgroundColor: '#ffffff', cacheBust: true })
           if (!blob) throw new Error('The browser could not draw the image.')
           const suffix = nodes.length > 1 ? `-part${index + 1}` : ''
           saveFile({ blob, filename: null }, `${slug(props.name)}${suffix}.png`)
@@ -331,7 +338,7 @@ function close() {
     >
       <ReportView
         v-for="(page, index) in pages"
-        :key="index"
+        :key="`${pages.length}-${index}`"
         :name="name"
         :snapshot="snapshot"
         :definition="definition"
@@ -339,6 +346,7 @@ function close() {
         :widget-ids="page"
         :show-unavailable="showUnavailable"
         :page="{ index: index + 1, count: pages.length }"
+        :variant="kind === 'print' ? 'print' : 'image'"
       />
     </div>
   </Teleport>
