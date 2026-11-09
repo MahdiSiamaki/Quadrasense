@@ -3,7 +3,7 @@
 **Status:** Implemented. Authentication, RBAC and audit are built and verified. The decisions and
 their evidence are in `docs/adr/ADR-006-authentication-and-access-control.md`; how to operate them
 is in `docs/architecture/12-identity-and-access.md`. Q9 is answered: local accounts now with an
-AD seam, a strictly internal deployment, and no MFA at go-live.
+AD seam and a strictly internal deployment. Two-step sign-in and recovery came later: ADR-022.
 
 ---
 
@@ -126,7 +126,8 @@ full comparison.
 - A 256-bit random value in an **`HttpOnly`, `Secure`, `SameSite=Strict`, `__Host-` prefixed**
   cookie. The database stores its SHA-256, never the value itself.
 - Never `localStorage`, which is readable by any injected script.
-- 8-hour idle timeout; 24-hour absolute ceiling that no amount of activity extends.
+- 8-hour idle timeout; 24-hour absolute ceiling that no amount of activity extends. "Remember me"
+  replaces both with one seven-day limit.
 - Sessions are revoked, not merely expired, on deactivation, password change or reset, and explicit
   revocation - and deactivation does it in the same transaction as the account change.
 - **CSRF**: double-submit token on every state-changing request, compared in constant time.
@@ -141,8 +142,15 @@ full comparison.
   the lockout handles that - it bounds the memory an unauthenticated caller can make the server
   allocate, since each attempt costs 19 MiB.
 
-**MFA is not built**, per the product owner's answer for a strictly internal deployment. No unused
-columns were added for it; the four steps to add it are recorded in ADR-006.
+**Two-step sign-in is an authenticator app** (ADR-022), offered to everyone and demanded by a role
+where that is set. A code by SMS is deliberately not a second step: that phone can already reset the
+password, so one person holding it would hold both factors. A wrong code counts towards the same
+lockout as a wrong password, and there is no session until the second step has succeeded.
+
+**Recovery cannot be used to find out whether an account exists.** A code goes only to a contact
+proved beforehand, in the terms MCI sets for one-time passwords, and the endpoint that asks for one
+looks at no account: the work happens on a queue after the response has gone. A reset ends every
+session and signs nobody in, so it cannot step around the second step.
 
 ## 5. Upload security
 
@@ -212,6 +220,9 @@ tell a reviewer what was taken away, which is the half that matters.
 - No secret is ever committed. `.env.example` documents every variable by name with a placeholder value.
 - Secrets are supplied by environment variables at deploy time; the repository contains a `.gitignore` that
   excludes `.env` and a CI secret-scanning step.
+- The key that protects authenticator secrets (`Auth:TwoStep:SecretKey`) is the one secret here whose loss
+  loses something: without it no authenticator can be read. It is kept with `.env` and apart from the
+  database's backups, so that a stolen backup does not carry it.
 - Database credentials are per-service and least-privilege: the API cannot `DROP`, the ingestion worker
   cannot read the audit table, the audit writer cannot `DELETE`.
 
@@ -219,7 +230,7 @@ tell a reviewer what was taken away, which is the half that matters.
 
 - Dependencies pinned to exact versions with a committed lock file.
 - CI runs vulnerability scanning on every build and fails on high/critical findings.
-- Dependency count kept deliberately small (nine runtime frontend packages) — the most reliable defence
+- Dependency count kept deliberately small (thirteen runtime frontend packages, three of them only typefaces) — the most reliable defence
   against supply-chain risk is not depending on much.
 
 ## 11. Residual risks

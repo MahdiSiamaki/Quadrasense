@@ -104,6 +104,10 @@ add them here.
 Professional, modern, enterprise-grade, responsive and accessible. Design tokens live in
 `frontend/src/design-system/`; use them rather than literal colours.
 
+A person can change the theme, typeface, text size, density, accent, corners and animation
+(ADR-023). A new page follows if it uses the tokens; a new chart must set its option through
+`setThemedOption` and redraw on `useChartRevision`, and a test fails otherwise.
+
 Ten traps that have already cost time, all still live:
 
 - **zrender cannot parse `oklch()`.** Passing a token straight to ECharts yields `undefined` and
