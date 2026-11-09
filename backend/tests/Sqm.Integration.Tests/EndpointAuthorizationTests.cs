@@ -44,6 +44,7 @@ public sealed class EndpointAuthorizationTests : IClassFixture<WebApplicationFac
         ["/api/v1/auth/options"] = "the sign-in page asks what to offer before anyone has signed in",
         ["/api/v1/auth/recovery/start"] = "whoever needs this cannot sign in",
         ["/api/v1/auth/recovery/complete"] = "whoever needs this cannot sign in",
+        ["/api/integration/v1/oauth/token"] = "where a system becomes known: it trades its id and secret for a token (ADR-024)",
         ["/openapi/{documentName}.json"] = "development only; not mapped outside Development",
     };
 
@@ -131,6 +132,48 @@ public sealed class EndpointAuthorizationTests : IClassFixture<WebApplicationFac
         // indistinguishable from a correctly denied request.
         var unknown = named.Where(p => !Permissions.All.Contains(p)).ToList();
         Assert.Empty(unknown);
+    }
+
+    [Fact]
+    public void Every_scope_policy_an_endpoint_names_is_a_real_scope()
+    {
+        var named = _factory.Services.GetRequiredService<EndpointDataSource>().Endpoints
+            .SelectMany(e => e.Metadata.OfType<IAuthorizeData>())
+            .Select(a => a.Policy)
+            .Where(p => p is not null && p.StartsWith(Sqm.Api.Auth.IntegrationPolicies.Prefix, StringComparison.Ordinal))
+            .Select(p => p![Sqm.Api.Auth.IntegrationPolicies.Prefix.Length..])
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.NotEmpty(named);
+        Assert.DoesNotContain(named, s => !Sqm.Application.Integration.IntegrationScopes.All.Contains(s));
+    }
+
+    [Fact]
+    public void Every_integration_route_but_the_token_endpoint_names_a_scope_policy_and_no_permission()
+    {
+        // A route under /api/integration must be reachable by a bearer token only: a permission policy there
+        // would let a session in, and a missing policy would fall back to the session's.
+        var routes = _factory.Services.GetRequiredService<EndpointDataSource>().Endpoints
+            .OfType<RouteEndpoint>()
+            .Where(e => e.RoutePattern.RawText?.StartsWith("/api/integration/", StringComparison.Ordinal) == true)
+            .ToList();
+
+        Assert.NotEmpty(routes);
+        foreach (var route in routes)
+        {
+            var policies = route.Metadata.OfType<IAuthorizeData>().Select(a => a.Policy ?? string.Empty).ToList();
+            if (route.Metadata.GetMetadata<IAllowAnonymous>() is not null)
+            {
+                Assert.Equal("/api/integration/v1/oauth/token", route.RoutePattern.RawText);
+                continue;
+            }
+
+            Assert.True(
+                policies.Count > 0 && policies.All(p => p.StartsWith(Sqm.Api.Auth.IntegrationPolicies.Prefix, StringComparison.Ordinal)
+                                                       || p == Sqm.Api.Auth.IntegrationPolicies.AnyClient),
+                $"{route.RoutePattern.RawText} must name only integration policies, and names: {string.Join(", ", policies)}");
+        }
     }
 
     [Fact]
