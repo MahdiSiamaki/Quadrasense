@@ -32,6 +32,10 @@ MCI's DevOps guide and its security red lines (`docs/operations/deployment/`) ar
 documents, and **this repository is public**: cite them by section, never copy an address,
 hostname, URL, contact or ticket path out of them.
 
+**Those two documents come first** (the product owner, 2026-11-09). Where one of them conflicts with
+another rule in this file or with an earlier decision, it wins: follow it and say so, rather than
+reopening the conflict as a question.
+
 ## Suggestions not built
 
 An improvement suggested and not built - for tokens, priority or a pending decision - goes into
@@ -72,7 +76,11 @@ Do not re-open these without asking:
   IMSI and IMEI are returned in full. The flag exists so it can be flipped without a code change.
 - **Retention is full history, no deletion.** Uploaded originals are kept indefinitely (~144 GB/
   year) because every table is rebuildable from them plus the pipeline.
-- **English only, LTR, Gregorian dates.** No Persian in the product UI, no Jalali calendar.
+- **English only, LTR, Gregorian dates.** No Persian in the product UI, no Jalali calendar - except
+  where MCI's red lines require it, which so far is the captcha below.
+- **The Persian captcha is required, for the MCI release** (2026-11-09). The red lines (§2-3 row 3)
+  outrank English-only. It is built for the release that goes to MCI's infrastructure, not before:
+  until then the login keeps its lockout and rate limits (ADR-006, ADR-022).
 - **Device images are proposed, never auto-applied.** Automatic sourcing once put a photograph of
   an office building into the catalogue. Nothing reaches the live image table without a person
   approving it — see `docs/adr/ADR-011-device-image-sourcing.md`.
