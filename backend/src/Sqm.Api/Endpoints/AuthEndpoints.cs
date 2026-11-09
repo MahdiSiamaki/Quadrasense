@@ -46,6 +46,11 @@ public static class AuthEndpoints
             .WithName("UpdateProfile")
             .WithSummary("Updates the fields a user may change about themselves.");
 
+        group.MapPut("/me/appearance", SaveAppearanceAsync)
+            .RequireAuthorization(PermissionPolicyProvider.PasswordChangeAllowed)
+            .WithName("SaveAppearance")
+            .WithSummary("Saves how the application looks for the signed-in user.");
+
         group.MapPost("/me/password", ChangePasswordAsync)
             .RequireAuthorization(PermissionPolicyProvider.PasswordChangeAllowed)
             .WithName("ChangePassword")
@@ -87,6 +92,7 @@ public static class AuthEndpoints
         ISessionStore sessions,
         IUserDirectory users,
         ITwoStepService twoStep,
+        IAppearanceStore appearance,
         IOptions<AuthOptions> authOptions,
         CancellationToken ct)
     {
@@ -129,7 +135,7 @@ public static class AuthEndpoints
         }
 
         return await StartSessionAsync(
-            outcome.UserId!.Value, request.RememberMe, http, sessions, users, twoStep,
+            outcome.UserId!.Value, request.RememberMe, http, sessions, users, twoStep, appearance,
             authOptions.Value.Session, ct).ConfigureAwait(false);
     }
 
@@ -140,6 +146,7 @@ public static class AuthEndpoints
         ITwoStepService twoStep,
         ISessionStore sessions,
         IUserDirectory users,
+        IAppearanceStore appearance,
         IOptions<AuthOptions> authOptions,
         CancellationToken ct)
     {
@@ -162,7 +169,7 @@ public static class AuthEndpoints
         return result.Status switch
         {
             TwoStepResultStatus.Success => await StartSessionAsync(
-                result.UserId!.Value, result.Remember, http, sessions, users, twoStep,
+                result.UserId!.Value, result.Remember, http, sessions, users, twoStep, appearance,
                 authOptions.Value.Session, ct).ConfigureAwait(false),
 
             TwoStepResultStatus.AccountLocked => Results.Json(new LoginFailure(
@@ -190,6 +197,7 @@ public static class AuthEndpoints
         ISessionStore sessions,
         IUserDirectory users,
         ITwoStepService twoStep,
+        IAppearanceStore appearance,
         SessionSettings options,
         CancellationToken ct)
     {
@@ -217,10 +225,11 @@ public static class AuthEndpoints
 
         var detail = await users.GetAsync(userId, ct).ConfigureAwait(false);
         var status = await twoStep.GetStatusAsync(userId, ct).ConfigureAwait(false);
+        var settings = await appearance.GetAsync(userId, ct).ConfigureAwait(false);
 
         return Results.Ok(Describe(
             detail!, session.IdleExpiresAt, session.AbsoluteExpiresAt,
-            status.Required && !status.Enabled));
+            status.Required && !status.Enabled, settings));
     }
 
     private static string Message(LoginOutcome outcome) => outcome.Status switch
@@ -266,7 +275,7 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> MeAsync(
-        HttpContext http, IUserDirectory users, CancellationToken ct)
+        HttpContext http, IUserDirectory users, IAppearanceStore appearance, CancellationToken ct)
     {
         var session = CurrentUser.Session(http)!;
         var detail = await users.GetAsync(session.User.UserId, ct).ConfigureAwait(false);
@@ -275,11 +284,45 @@ public static class AuthEndpoints
             ? Results.Unauthorized()
             : Results.Ok(Describe(
                 detail, session.IdleExpiresAt, session.AbsoluteExpiresAt,
-                session.User.MustSetUpTwoStep));
+                session.User.MustSetUpTwoStep,
+                await appearance.GetAsync(session.User.UserId, ct).ConfigureAwait(false)));
+    }
+
+    /// <summary>Saves how the application looks for this person.</summary>
+    /// <remarks>
+    /// Validated against the contract the page was built from, because this is a row that is
+    /// stored: a client that sends anything else did not get it from the page.
+    /// </remarks>
+    private static async Task<IResult> SaveAppearanceAsync(
+        Dictionary<string, string> settings, HttpContext http, IAppearanceStore appearance,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(appearance);
+
+        var problem = AppearanceContract.Problem(settings);
+
+        if (problem is not null)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["appearance"] = [problem],
+            });
+        }
+
+        await appearance.SaveAsync(
+            CurrentUser.Require(http).UserId, AppearanceContract.Complete(settings), ct)
+            .ConfigureAwait(false);
+
+        return Results.NoContent();
     }
 
     private static async Task<IResult> UpdateProfileAsync(
-        ProfileRequest request, HttpContext http, IUserDirectory users, CancellationToken ct)
+        ProfileRequest request,
+        HttpContext http,
+        IUserDirectory users,
+        IAppearanceStore appearance,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -303,7 +346,8 @@ public static class AuthEndpoints
         var detail = await users.GetAsync(session.User.UserId, ct).ConfigureAwait(false);
         return Results.Ok(Describe(
             detail!, session.IdleExpiresAt, session.AbsoluteExpiresAt,
-            session.User.MustSetUpTwoStep));
+            session.User.MustSetUpTwoStep,
+            await appearance.GetAsync(session.User.UserId, ct).ConfigureAwait(false)));
     }
 
     private static async Task<IResult> ChangePasswordAsync(
@@ -424,7 +468,8 @@ public static class AuthEndpoints
         UserDetail detail,
         DateTimeOffset idleExpires,
         DateTimeOffset absoluteExpires,
-        bool mustSetUpTwoStep) =>
+        bool mustSetUpTwoStep,
+        IReadOnlyDictionary<string, string>? appearance) =>
         new(
             detail.Id,
             detail.Username,
@@ -447,7 +492,8 @@ public static class AuthEndpoints
             detail.EmailVerifiedAt is not null,
             detail.PhoneVerifiedAt is not null,
             detail.TwoStepEnabledAt is not null,
-            mustSetUpTwoStep);
+            mustSetUpTwoStep,
+            appearance);
 }
 
 /// <summary>Credentials submitted to the login endpoint.</summary>
@@ -502,4 +548,5 @@ public sealed record CurrentUserResponse(
     bool EmailVerified,
     bool PhoneVerified,
     bool TwoStepEnabled,
-    bool MustSetUpTwoStep);
+    bool MustSetUpTwoStep,
+    IReadOnlyDictionary<string, string>? Appearance);

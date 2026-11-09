@@ -226,6 +226,7 @@ builder.Services.AddSingleton<IAccountOutbox>(sp => sp.GetRequiredService<Accoun
 builder.Services.AddSingleton<IAccountRecovery, PostgresAccountRecovery>();
 builder.Services.AddSingleton<IContactVerification, PostgresContactVerification>();
 builder.Services.AddSingleton<ITwoStepService, PostgresTwoStepService>();
+builder.Services.AddSingleton<IAppearanceStore, PostgresAppearanceStore>();
 builder.Services.AddHostedService<AccountOutboxDispatcher>();
 
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
