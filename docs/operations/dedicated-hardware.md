@@ -109,6 +109,7 @@ the merge. On dedicated hardware:
 | `sqm_app` and `sqm_ingest` share one development password (`sqm-app-user.xml`) | Separate secrets, from the environment - the file already says so |
 | System-log TTLs and flush settings tuned to stop thousands of tiny parts (`system-logs.xml`, `11-…` §7) | Keep, re-tune retention to the disk |
 | Idle work in at most two lanes (`ImportWorker:MaxIdleLanes`), the only number measured, on this machine (ADR-021) | The formula follows the memory and the cores by itself. Raise the cap against measurement, and consider several chunks of one run at once |
+| The integration API's batch lookup answers its identifiers one after another, and caps a batch at 50 (`Integration:MaxBatch`; ADR-024): one heavy statement at a time on this ClickHouse. Measured 2026-11-09: a batch of 20 in 4.7 s | A few in parallel, and a larger cap, measured against the per-client rate (`Integration:RequestsPerMinute`, 600) |
 
 ### 7. Stalls on the laptop's Docker port
 

@@ -146,11 +146,11 @@ the owner's decision, and `05-roadmap.md` records only what is scheduled.
 | Stock lot, vendor, free IMSI and ICCID ranges | **Not built.** No feed carries them. | - |
 | S6a tap: IMEI-SV, software version, visited network on every attach | **Not built.** Quadrasense takes daily batches only. The non-goal "no streaming" in `01-overview.md` stands until a feed arrives more often than once a day. | `01-overview.md` §1 |
 | MAP tap: reachability and location | **Not built.** | - |
-| CRM's declared swap, activation and deactivation events | **Not built.** SIM changes are *observed* in the binding feed (risk signals). The declared commercial fact is not received. | ADR-014 |
+| CRM's declared swap, activation and deactivation events | **Intake built, 2026-11-09** (ADR-024): Lodestone delivers them, idempotently; shown as *declared* beside the *observed* history. Not yet used by the risk rules. | ADR-014, ADR-024 |
 | BI's CDR and usage aggregates; SNQM's per-model quality | **Not built.** | - |
-| Query API for Lodestone, and facts for Tessera | **Not built.** The API serves Quadrasense's own UI, behind its sign-in sessions. There is no machine-to-machine contract. | `12-identity-and-access.md` |
+| Query API for Lodestone, and facts for Tessera | **Built, 2026-11-09** (ADR-024): `/api/integration/v1`, OAuth 2.0 client credentials issued by PI - lookup, history, relationships, device models, facts, each day's changes, an event feed Lodestone pulls. | `docs/integration/` |
 | SIM data for the OTA platforms' campaign targets | **Partial.** The campaign list is an approved, audited CSV of the numbers in a planning class, carried by a person. It is not an interface. | `19-network-planning.md` §4 |
-| Range allocator for Secureseed | **Not built.** It is also a different kind of work: a write path that reserves ranges and must never hand one out twice. A wrong answer is a card personalised wrong. | - |
+| Range allocator for Secureseed | **Not PI's in figure v6**: Ganjineh (IRR), the identifier resource registry, holds the IMSI ranges and hands Secureseed its portion. | `docs/integration/PI-INTEGRATION-MATRIX.md` |
 
 The landscape's answers that "only PI can give" are covered as follows:
 
@@ -205,6 +205,10 @@ into the repository beyond what this page already says.
 
 When the landscape changes, update this page: its roles, its statuses and the gap table in
 section 4.
+
+**Figure v6 (2026-11-09)** adds Ganjineh (IRR), which takes the IMSI ranges from PI's list of target
+containers, and draws Tessera reading PI's facts directly. Its edges at PI, the API that serves each, and the
+gaps left are in `docs/integration/PI-INTEGRATION-MATRIX.md`.
 
 ## Terms
 

@@ -58,6 +58,7 @@ SQL forms produce the same set for a user holding a role, a direct grant and a d
 | Administration | `user.view` / `user.manage` | See / change accounts |
 | | `role.view` / `role.manage` | See / change roles |
 | | `audit.view` | Read the trail |
+| | `integration.manage` | Register the systems that call the integration API, choose their scopes, rotate their secrets (ADR-024). Dangerous |
 | | `system.admin` | Everything not covered by a narrower one |
 
 Seeded roles:
@@ -300,6 +301,12 @@ curl -s -b jar.txt -H "X-CSRF-Token: $CSRF" -X POST ...
 ```
 
 A write without the header returns 403 with a body that says exactly this.
+
+**Another system does not sign in at all.** The estate's systems - Lodestone, Tessera - reach PI through the
+integration API, `/api/integration/v1`, with OAuth 2.0 client credentials PI issues: a registered client, a
+15-minute bearer token, scopes instead of permissions (ADR-024). Its routes take no session, and a token opens
+none of the routes above. An administrator with `integration.manage` registers a client at
+`/api/v1/integration/clients`; see `docs/integration/PI-API-ARCHITECTURE.md` §8.
 
 ## 8. What is not built
 
