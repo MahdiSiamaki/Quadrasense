@@ -302,10 +302,38 @@ public sealed partial class DashboardWidgetDataLoader
 
         return Done(
             Data(("feedQuality", feed)), Iso(feed.Days.Count == 0 ? null : feed.Days[^1].Date), [],
-            Table(["Day", "Rows in the file", .. checks.Select(x => rate ? $"{x}, percent" : $"{x}, rows"), "Flagged"],
+            Table(["Day", "Rows in the file", .. checks.Select(x => rate ? $"{CheckLabel(x)}, percent" : $"{CheckLabel(x)}, rows"), "Flagged"],
                 [.. days.Select(d => (IReadOnlyList<object?>)[Iso(d.Date), d.Rows, .. checks.Select(x => Value(d, x)), d.Flagged])],
                 Visible, "Every measured day in the dashboard's range."));
     }
+
+    /// <summary>A feed-quality check as the card's legend names it, not its code.</summary>
+    private static string CheckLabel(string check) => check switch
+    {
+        "ShiftedImei" => "IMEIs shifted by one digit",
+        "MultiNumberSim" => "SIMs with several numbers",
+        "MalformedImei" => "Malformed IMEIs",
+        "UnknownDevice" => "Unknown-device rows",
+        _ => check,
+    };
+
+    /// <summary>A signals group as the card heads it.</summary>
+    private static string GroupLabel(string group) => group switch
+    {
+        "identifiers" => "Identifiers - current state",
+        "sequences" => "Sequences the history contradicts",
+        "lifetimes" => "How long the feed held a binding",
+        _ => group,
+    };
+
+    /// <summary>What a signals count counts, as the card's setting says it.</summary>
+    private static string UnitLabel(string unit) => unit switch
+    {
+        "numbers" => "Numbers",
+        "sims" => "SIMs (estimated)",
+        "imeis" => "IMEIs (estimated)",
+        _ => "Bindings",
+    };
 
     private async Task<WidgetDataResult> FlaggedDaysAsync(Config c, DashboardLens lens, WidgetLoadContext context, CancellationToken ct)
     {
@@ -352,9 +380,9 @@ public sealed partial class DashboardWidgetDataLoader
         return Done(
             Data(("signals", signals)), Iso(signals.AsOf),
             ["A binding can be in more than one category.", "SIMs and IMEIs are estimated (about 0.5%); bindings and numbers are exact."],
-            Table(["Group", "Category", unit, "Share of the base, percent"],
+            Table(["Group", "Category", UnitLabel(unit), "Share of the base, percent"],
                 [.. signals.Categories.Where(s => groups.Contains(s.Group, StringComparer.Ordinal))
-                    .Select(s => Row(s.Group, s.Label, Value(s), s.Share * 100))],
+                    .Select(s => Row(GroupLabel(s.Group), s.Label, Value(s), s.Share * 100))],
                 Visible, "The categories the card shows."));
     }
 

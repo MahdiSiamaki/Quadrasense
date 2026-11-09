@@ -294,6 +294,9 @@ Recorded here rather than silently folded into the sections above.
   light report by clearing the chart-colour cache, because ECharts holds resolved colours. Pages
   over 6,500 px are split. Not measured on the largest dashboard yet; recorded as a limitation in
   `docs/architecture/17-dashboard-builder.md`.
+
+  > **SUPERSEDED (2026-11-09)**: pages are cut where the cards really end, at most 7,000 px, and the
+  > largest template is measured - see the amendments of that date below.
 - **The design system gained a wide dialog** (`Modal` size `xl`, `fill`) for the Add Widget wizard
   and the export review. The `<dialog>` centring trap in `CLAUDE.md` applies to it unchanged.
 - **Snapshot statuses** are `ok`, `forbidden`, `notReady`, `error`, `interactive` and `noData`.
@@ -327,3 +330,42 @@ Recorded here rather than silently folded into the sections above.
 - **The contract's limits hold during editing, not only at Save**: the widget count for Duplicate
   as for Add, the 40-row height for the grid's resize, and the lens rules for a widget's own
   overrides in the configure form.
+
+## Amendments after the export review, 2026-11-09
+
+The owner asked for every export mode to be checked and its faults fixed. Each template was exported for
+real on the laptop - as PNG, printed to PDF with and without the browser's background graphics, and as
+CSV - and measured from what the files contain, not from the live page.
+
+- **A report is drawn for a copy, not a page** (`lib/report-mode.ts`). Every chart in it shows every day
+  it was given - no zoom window, no slider - and draws its canvas at the capture's pixel ratio. Daily
+  change had opened on its last third with a slider under it while its caption said every day of the
+  range, and every canvas was drawn at the screen's ratio, then scaled up. A test fails for a chart that
+  does not ask for the mode, or keeps its zoom in it.
+- **A card keeps the height the dashboard gave it, and grows when its content needs more.** The card body
+  was `min-h-0 flex-1`: a flex basis of 0 in a column of no fixed height, so its height was ignored and a
+  chart drawn at 100% of it was 100 px of axis (Daily change, SIM-change evidence, Feed quality). It is
+  `flex: 1 0 auto` now. Before capture, `fitReport` grows each body until nothing in it overflows, then
+  turns every scroll box off: html-to-image freezes each box at the size it measured, so a table that
+  fitted its box exactly overflowed by a fraction of a pixel in the copy and drew a scrollbar, taking its
+  last row and the end of every right-aligned figure with it. A name cut short with an ellipsis wraps
+  instead, because nothing in a report can be hovered.
+- **PNG pages are cut where the cards end**, measured on the rendered report, at most 7,000 CSS px - twice
+  that in pixels, under the 16,384 a canvas may have, past which html-to-image shrinks the whole image.
+  The height estimate that cut them before is gone. The tallest template is one 2400 × 6870 px image in
+  2.5 s; the four take 1.5–2.6 s each.
+- **Print draws the report at the width it prints**: 1024 px of the 1031 an A4 landscape page has between
+  12 mm margins. Stretched to the page, a 1200 px report's canvases - never redrawn for paper - were cut at
+  each card's right edge. `print-color-adjust: exact` keeps the report's colours: with the browser's
+  default of no background graphics every HTML bar, share and swatch had vanished. With background
+  graphics on, the paper stays white; the app's canvas grey had printed under the last card.
+- **A CSV says what its card says.** Columns are headed as the card heads them - Vendor, Model, Device
+  type, the feed checks and signal units in words - never with a configuration key. `about.txt` names the
+  lens by its values ("count by bindings, the last 90 days of data, unknown devices excluded"), not as
+  "the dashboard's defaults". The response says how many widgets were asked for and how many files it
+  holds (`X-Export-Requested`, `X-Export-Included`), so the dialog no longer reports one CSV per widget
+  when some were left out.
+- **Date axes keep their first and last day** (`lib/chart-axis.ts`), on the page as in every export.
+  ECharts drops the last day's label when it overlaps its neighbour unless told otherwise, and the
+  neighbour, centred a few days from the end, ran off the canvas. One case remains and is accepted: when
+  the label two before the last still reaches it, the last day goes unlabelled. Nothing is cut.

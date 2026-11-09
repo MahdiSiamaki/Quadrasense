@@ -6,12 +6,14 @@ import { DataZoomComponent, GridComponent, LegendComponent, MarkAreaComponent, M
 import { CanvasRenderer } from 'echarts/renderers'
 import { CHECK_LABELS, flaggedDays, type FeedQualityCheck, type FeedQualityDay, type FeedQualityResponse } from '@/api/quality'
 import { fillCalendar, isMissing } from '@/lib/calendar'
+import { edgeDateLabels } from '@/lib/chart-axis'
 import { chartColor } from '@/lib/chart-colors'
 import { tooltipBounds } from '@/lib/chart-tooltip'
 import { leaveWheelToPage } from '@/lib/chart-zoom'
 import { feedQualityMarkArea } from '@/lib/feed-quality-bands'
 import { formatCompact, formatFull, formatPercent } from '@/lib/format'
 import { useChartRevision } from '@/lib/appearance'
+import { reportInitOptions, useReportMode } from '@/lib/report-mode'
 import { setThemedOption } from '@/lib/chart-theme'
 import { CHECK_COLOURS, checkCount, checkRate, checkThreshold } from './feedTrend'
 
@@ -37,6 +39,8 @@ const props = withDefaults(
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
 const revision = useChartRevision()
+// In an export: every day drawn, no zoom, the canvas at the export's pixel ratio (lib/report-mode).
+const report = useReportMode()
 
 function render() {
   if (!chart.value) return
@@ -98,7 +102,7 @@ function render() {
       xAxis: {
         type: 'category',
         data: dates,
-        axisLabel: { color: muted, fontSize: 10, hideOverlap: true, alignMinLabel: 'left', alignMaxLabel: 'right' },
+        axisLabel: { color: muted, fontSize: 10, ...edgeDateLabels },
         axisLine: { lineStyle: { color: border } },
       },
       yAxis: {
@@ -108,7 +112,7 @@ function render() {
         axisLabel: { color: muted, fontSize: 10, formatter: (v: number) => (rate ? formatPercent(v * 100, v < 0.01 ? 2 : 0) : formatCompact(v)) },
         splitLine: { lineStyle: { color: border, type: 'dashed' } },
       },
-      dataZoom: [{ type: 'inside', start: props.zoomStart, end: 100 }],
+      dataZoom: report ? [] : [{ type: 'inside', start: props.zoomStart, end: 100 }],
       series,
     },
     { notMerge: true },
@@ -119,7 +123,7 @@ let observer: ResizeObserver | null = null
 
 onMounted(() => {
   if (!container.value) return
-  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas' })
+  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas', ...reportInitOptions(report) })
   leaveWheelToPage(container.value)
   render()
   observer = new ResizeObserver(() => chart.value?.resize())

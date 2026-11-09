@@ -7,8 +7,10 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { formatCompact, formatFull } from '@/lib/format'
 import { useChartRevision } from '@/lib/appearance'
 import { setThemedOption } from '@/lib/chart-theme'
+import { edgeDateLabels } from '@/lib/chart-axis'
 import { chartColor } from '@/lib/chart-colors'
 import { tooltipBounds } from '@/lib/chart-tooltip'
+import { reportInitOptions, useReportMode } from '@/lib/report-mode'
 
 echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
@@ -35,6 +37,8 @@ const props = withDefaults(
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
 const revision = useChartRevision()
+// In an export the canvas is drawn at the export's pixel ratio, not the screen's (lib/report-mode).
+const report = useReportMode()
 
 function render() {
   if (!chart.value) return
@@ -67,7 +71,7 @@ function render() {
       xAxis: {
         type: 'category',
         data: props.points.map((p) => p.label),
-        axisLabel: { color: muted, fontSize: 10, hideOverlap: true, alignMinLabel: 'left', alignMaxLabel: 'right' },
+        axisLabel: { color: muted, fontSize: 10, ...edgeDateLabels },
         axisLine: { lineStyle: { color: border } },
       },
       yAxis: {
@@ -94,7 +98,7 @@ let observer: ResizeObserver | null = null
 
 onMounted(() => {
   if (!container.value) return
-  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas' })
+  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas', ...reportInitOptions(report) })
   render()
   observer = new ResizeObserver(() => chart.value?.resize())
   observer.observe(container.value)

@@ -13,7 +13,9 @@ import {
 import { CanvasRenderer } from 'echarts/renderers'
 import { formatCompact, formatFull, formatSigned } from '@/lib/format'
 import { useChartRevision } from '@/lib/appearance'
+import { reportInitOptions, useReportMode } from '@/lib/report-mode'
 import { setThemedOption } from '@/lib/chart-theme'
+import { edgeDateLabels } from '@/lib/chart-axis'
 import { chartColor, withAlpha } from '@/lib/chart-colors'
 import { fillCalendar, isMissing } from '@/lib/calendar'
 import { feedQualityMarkArea, feedQualityTooltip } from '@/lib/feed-quality-bands'
@@ -73,6 +75,8 @@ const props = withDefaults(
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
 const revision = useChartRevision()
+// In an export: every day drawn, no zoom, the canvas at the export's pixel ratio (lib/report-mode).
+const report = useReportMode()
 
 /*
   Tokens are oklch, and ECharts needs a colour it can compute with, not only paint. Reading the
@@ -170,7 +174,7 @@ function render() {
       },
       // The axis titles are drawn above the plot, in the same corners as the legend. At top 30 the
       // right-hand title sat on top of the legend's last entry; 52 gives each its own row.
-      grid: { left: 8, right: 8, top: 52, bottom: 46 },
+      grid: { left: 8, right: 8, top: 52, bottom: report ? 24 : 46 },
       tooltip: {
         ...tooltipBounds,
         trigger: 'axis',
@@ -195,13 +199,13 @@ function render() {
         type: 'category',
         data: dates,
         // The first and last dates align to the plot's edges: centred on the end ticks they ran off the canvas.
-        axisLabel: { color: muted, fontSize: 10, hideOverlap: true, alignMinLabel: 'left', alignMaxLabel: 'right' },
+        axisLabel: { color: muted, fontSize: 10, ...edgeDateLabels },
         axisLine: { lineStyle: { color: border } },
       },
       yAxis,
       // 133 days is more than fits legibly; the zoom starts on the most recent third and
       // the whole range stays reachable by dragging.
-      dataZoom: [
+      dataZoom: report ? [] : [
         { type: 'inside', start: props.zoomStart, end: 100 },
         {
           type: 'slider',
@@ -225,7 +229,7 @@ let observer: ResizeObserver | null = null
 
 onMounted(() => {
   if (!container.value) return
-  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas' })
+  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas', ...reportInitOptions(report) })
   leaveWheelToPage(container.value)
   render()
   observer = new ResizeObserver(() => chart.value?.resize())

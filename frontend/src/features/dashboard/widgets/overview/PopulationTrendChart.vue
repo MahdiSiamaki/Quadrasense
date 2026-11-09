@@ -6,6 +6,8 @@ import { GridComponent, TooltipComponent, MarkAreaComponent } from 'echarts/comp
 import { CanvasRenderer } from 'echarts/renderers'
 import { formatCompact, formatDate, formatFull, formatMonth } from '@/lib/format'
 import { useChartRevision } from '@/lib/appearance'
+import { edgeDateLabels } from '@/lib/chart-axis'
+import { reportInitOptions, useReportMode } from '@/lib/report-mode'
 import { setThemedOption } from '@/lib/chart-theme'
 import { chartColor } from '@/lib/chart-colors'
 import { tooltipBounds } from '@/lib/chart-tooltip'
@@ -48,6 +50,8 @@ const props = withDefaults(
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
 const revision = useChartRevision()
+// In an export the canvas is drawn at the export's pixel ratio, not the screen's (lib/report-mode).
+const report = useReportMode()
 
 /*
   Tokens are oklch, and ECharts needs a colour it can compute with, not only paint. Reading the
@@ -119,14 +123,7 @@ function render() {
         type: 'category',
         data: keys,
         // The first and last labels align to the plot's edges: centred on the end ticks they ran off the canvas.
-        axisLabel: {
-          color: muted,
-          fontSize: 10,
-          hideOverlap: true,
-          alignMinLabel: 'left',
-          alignMaxLabel: 'right',
-          formatter: axisLabel,
-        },
+        axisLabel: { color: muted, fontSize: 10, ...edgeDateLabels, formatter: axisLabel },
         axisLine: { lineStyle: { color: border } },
       },
       yAxis: {
@@ -160,7 +157,7 @@ function ensureChart(): boolean {
   if (chart.value) return true
   const el = container.value
   if (!el || el.clientWidth === 0 || el.clientHeight === 0) return false
-  chart.value = echarts.init(el, undefined, { renderer: 'canvas' })
+  chart.value = echarts.init(el, undefined, { renderer: 'canvas', ...reportInitOptions(report) })
   return true
 }
 

@@ -6,6 +6,7 @@ import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { formatCompact, formatFull, formatPercent } from '@/lib/format'
 import { useChartRevision } from '@/lib/appearance'
+import { reportInitOptions, useReportMode } from '@/lib/report-mode'
 import { setThemedOption } from '@/lib/chart-theme'
 import { chartColor } from '@/lib/chart-colors'
 import { tooltipBounds } from '@/lib/chart-tooltip'
@@ -59,6 +60,8 @@ const size = computed(() => {
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
 const revision = useChartRevision()
+// In an export the canvas is drawn at the export's pixel ratio, not the screen's (lib/report-mode).
+const report = useReportMode()
 
 /*
   Tokens are oklch, and ECharts needs a colour it can compute with, not only paint. Reading the
@@ -160,7 +163,7 @@ let observer: ResizeObserver | null = null
 
 onMounted(() => {
   if (!container.value) return
-  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas' })
+  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas', ...reportInitOptions(report) })
   chart.value.on('click', (p: { name: string }) => emit('select', p.name))
   render()
 

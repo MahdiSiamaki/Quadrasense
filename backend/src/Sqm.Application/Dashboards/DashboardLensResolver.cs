@@ -26,6 +26,23 @@ public static class DashboardLensResolver
     /// <summary>The range when nothing chooses one: everything the source has.</summary>
     public const string DefaultRange = "all";
 
+    /// <summary>
+    /// The dashboard's view: the URL's choices over the saved defaults, with the defaults of last resort
+    /// filled in - what the report header and a CSV's about.txt describe, before any widget's own override.
+    /// </summary>
+    public static DashboardLens View(DashboardLens defaults, DashboardLens? url)
+    {
+        ArgumentNullException.ThrowIfNull(defaults);
+        return new DashboardLens(
+            CountBy: url?.CountBy ?? defaults.CountBy ?? DefaultCountBy,
+            IncludeUnknownDevice: url?.IncludeUnknownDevice ?? defaults.IncludeUnknownDevice ?? false,
+            Range: url?.Range ?? defaults.Range ?? DefaultRange,
+            Vendor: url?.Vendor ?? defaults.Vendor,
+            DeviceType: url?.DeviceType ?? defaults.DeviceType,
+            OperatingSystem: url?.OperatingSystem ?? defaults.OperatingSystem,
+            Tac: url?.Tac ?? defaults.Tac);
+    }
+
     /// <summary>The effective lens for one widget.</summary>
     /// <param name="spec">The widget's type.</param>
     /// <param name="defaults">The dashboard's defaults.</param>

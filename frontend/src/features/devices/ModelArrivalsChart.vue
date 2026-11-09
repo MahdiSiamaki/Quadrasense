@@ -8,6 +8,7 @@ import type { ModelArrivals } from '@/api/modelArrivals'
 import { chartColor } from '@/lib/chart-colors'
 import { formatCompact, formatDate, formatFull, formatMonth } from '@/lib/format'
 import { useChartRevision } from '@/lib/appearance'
+import { reportInitOptions, useReportMode } from '@/lib/report-mode'
 import { setThemedOption } from '@/lib/chart-theme'
 import { tooltipBounds } from '@/lib/chart-tooltip'
 
@@ -23,6 +24,8 @@ const props = withDefaults(defineProps<{ data: ModelArrivals; height?: string }>
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
 const revision = useChartRevision()
+// In an export the canvas is drawn at the export's pixel ratio, not the screen's (lib/report-mode).
+const report = useReportMode()
 
 function label(iso: string): string {
   return props.data.grain === 'month' ? formatMonth(iso) : formatDate(iso)
@@ -96,7 +99,7 @@ function render() {
 let observer: ResizeObserver | null = null
 onMounted(() => {
   if (!container.value) return
-  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas' })
+  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas', ...reportInitOptions(report) })
   render()
   observer = new ResizeObserver(() => chart.value?.resize())
   observer.observe(container.value)

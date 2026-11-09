@@ -218,6 +218,8 @@ public sealed class DashboardExportEndpointTests : IClassFixture<WebApplicationF
         var exposed = string.Join(",", response.Headers.GetValues("Access-Control-Expose-Headers")).Split(',').Select(h => h.Trim()).ToList();
         Assert.Contains("Content-Disposition", exposed, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("X-Export-Scope", exposed, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("X-Export-Included", exposed, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("X-Export-Requested", exposed, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -228,6 +230,9 @@ public sealed class DashboardExportEndpointTests : IClassFixture<WebApplicationF
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("application/zip", response.Content.Headers.ContentType?.MediaType);
         Assert.Equal("topN,visible", Assert.Single(response.Headers.GetValues("X-Export-Scope")));
+        // Two of the three asked for are in the file: the dialog says so rather than "one CSV per widget".
+        Assert.Equal(("2", "3"), (
+            Assert.Single(response.Headers.GetValues("X-Export-Included")), Assert.Single(response.Headers.GetValues("X-Export-Requested"))));
 
         await using var stream = await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken);
         using var zip = new ZipArchive(stream, ZipArchiveMode.Read);
@@ -238,7 +243,16 @@ public sealed class DashboardExportEndpointTests : IClassFixture<WebApplicationF
         var text = await about.ReadToEndAsync(TestContext.Current.CancellationToken);
         Assert.Contains("Freshness (ops.freshness)", text, StringComparison.Ordinal);
         Assert.Contains("Not included (forbidden)", text, StringComparison.Ordinal);
+        // The view the rows were read under, in words - never "the dashboard's defaults" without saying what they are.
+        Assert.Contains("Lens: count by bindings, every available day, vendor Samsung, unknown devices excluded", text, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("all", "every available day")]
+    [InlineData("last90", "the last 90 days of data")]
+    [InlineData("2026-03-05..2026-03-08", "2026-03-05 to 2026-03-08")]
+    public void The_about_file_words_a_range_as_the_dashboards_header_does_not_as_its_token(string range, string words) =>
+        Assert.Equal(words, Sqm.Api.Infrastructure.DashboardCsvWriter.RangeText(range));
 
     [Fact]
     public async Task A_CSV_of_one_forbidden_widget_is_refused_rather_than_sent_empty()

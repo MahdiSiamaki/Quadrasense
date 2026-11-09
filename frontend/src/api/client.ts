@@ -179,6 +179,12 @@ export interface DownloadedFile {
    * SPA and the API on different ports). Null if a proxy strips it, so callers keep a fallback.
    */
   filename: string | null
+  /**
+   * For a dashboard's CSV: how many of the widgets asked for are in the file, and how many were asked for
+   * (`X-Export-Included`, `X-Export-Requested`). Null for any other download.
+   */
+  included?: number | null
+  requested?: number | null
 }
 
 /**
@@ -237,7 +243,11 @@ export const api = {
     const disposition = response.headers.get('Content-Disposition') ?? ''
     const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition)
     const filename = match ? decodeURIComponent(match[1] ?? match[2] ?? '') || null : null
-    return { blob: await response.blob(), filename }
+    const count = (name: string) => {
+      const value = Number.parseInt(response.headers.get(name) ?? '', 10)
+      return Number.isFinite(value) ? value : null
+    }
+    return { blob: await response.blob(), filename, included: count('X-Export-Included'), requested: count('X-Export-Requested') }
   },
 }
 

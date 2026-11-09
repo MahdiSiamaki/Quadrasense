@@ -12,7 +12,9 @@ import {
 import { CanvasRenderer } from 'echarts/renderers'
 import { formatCompact, formatFull } from '@/lib/format'
 import { useChartRevision } from '@/lib/appearance'
+import { reportInitOptions, useReportMode } from '@/lib/report-mode'
 import { setThemedOption } from '@/lib/chart-theme'
+import { edgeDateLabels } from '@/lib/chart-axis'
 import { chartColor } from '@/lib/chart-colors'
 import { fillCalendar, isMissing } from '@/lib/calendar'
 import { feedQualityMarkArea, feedQualityTooltip } from '@/lib/feed-quality-bands'
@@ -66,6 +68,8 @@ const props = withDefaults(
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
 const revision = useChartRevision()
+// In an export: every day drawn, no zoom, the canvas at the export's pixel ratio (lib/report-mode).
+const report = useReportMode()
 
 /*
   Tokens are oklch, and ECharts needs a colour it can compute with, not only paint. Reading the
@@ -135,7 +139,7 @@ function render() {
         type: 'category',
         data: days.map((d) => d.date),
         // The first and last dates align to the plot's edges: centred on the end ticks they ran off the canvas.
-        axisLabel: { color: muted, fontSize: 10, hideOverlap: true, alignMinLabel: 'left', alignMaxLabel: 'right' },
+        axisLabel: { color: muted, fontSize: 10, ...edgeDateLabels },
         axisLine: { lineStyle: { color: border } },
       },
       yAxis: {
@@ -143,7 +147,7 @@ function render() {
         axisLabel: { color: muted, fontSize: 10, formatter: (v: number) => formatCompact(v) },
         splitLine: { lineStyle: { color: border, type: 'dashed' } },
       },
-      dataZoom: [{ type: 'inside', start: props.zoomStart, end: 100 }],
+      dataZoom: report ? [] : [{ type: 'inside', start: props.zoomStart, end: 100 }],
       series,
     },
     { notMerge: true },
@@ -154,7 +158,7 @@ let observer: ResizeObserver | null = null
 
 onMounted(() => {
   if (!container.value) return
-  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas' })
+  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas', ...reportInitOptions(report) })
   leaveWheelToPage(container.value)
   render()
   observer = new ResizeObserver(() => chart.value?.resize())
