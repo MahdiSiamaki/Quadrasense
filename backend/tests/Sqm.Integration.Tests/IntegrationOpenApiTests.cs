@@ -29,6 +29,10 @@ public sealed class IntegrationOpenApiTests(WebApplicationFactory<Program> facto
         var generated = JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!.AsObject();
         // The server URL is the host the document was asked from: not part of the contract.
         generated.Remove("servers");
+        // A description that spans lines carries the building machine's line break - CR LF on Windows, LF on
+        // the department's Linux runners, where this test once failed for it. The contract is the text, so
+        // both sides are compared with LF.
+        Normalise(generated);
 
         var path = Path.Combine(RepositoryRoot(), Committed);
         if (Environment.GetEnvironmentVariable("SQM_WRITE_OPENAPI") == "1")
@@ -39,10 +43,49 @@ public sealed class IntegrationOpenApiTests(WebApplicationFactory<Program> facto
         }
 
         var committed = JsonNode.Parse(await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken))!;
+        Normalise(committed);
         var difference = FirstDifference(committed, generated, "$");
         Assert.True(difference is null,
             $"{Committed} differs from what the API generates at {difference}. If the change is meant, regenerate with SQM_WRITE_OPENAPI=1 and review the diff.");
     }
+
+    /// <summary>Every string in a document with its line breaks as LF.</summary>
+    private static void Normalise(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject o:
+                foreach (var key in o.Select(p => p.Key).ToList())
+                {
+                    if (o[key] is JsonValue value && value.TryGetValue<string>(out var text))
+                    {
+                        o[key] = Lf(text);
+                    }
+                    else
+                    {
+                        Normalise(o[key]);
+                    }
+                }
+
+                break;
+            case JsonArray a:
+                for (var i = 0; i < a.Count; i++)
+                {
+                    if (a[i] is JsonValue value && value.TryGetValue<string>(out var text))
+                    {
+                        a[i] = Lf(text);
+                    }
+                    else
+                    {
+                        Normalise(a[i]);
+                    }
+                }
+
+                break;
+        }
+    }
+
+    private static string Lf(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal);
 
     private static string? FirstDifference(JsonNode? expected, JsonNode? actual, string at)
     {

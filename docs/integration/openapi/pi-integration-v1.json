@@ -1995,7 +1995,7 @@
             "description": "The last day of the binding feed PI holds."
           }
         },
-        "description": "The facts a policy decision is written against (Tessera): what PI observed, never a decision. Whether\r\nsomething is eligible, blocked or grey-listed is Tessera's to say."
+        "description": "The facts a policy decision is written against (Tessera): what PI observed, never a decision. Whether\nsomething is eligible, blocked or grey-listed is Tessera's to say."
       },
       "InventoryHistoryResponse": {
         "required": [
@@ -2203,7 +2203,7 @@
               "integer",
               "string"
             ],
-            "description": "How many phone numbers have been seen on both. This is the evidence: it is what distinguishes\r\na real pair from two handsets that merely came off the line one after another.",
+            "description": "How many phone numbers have been seen on both. This is the evidence: it is what distinguishes\na real pair from two handsets that merely came off the line one after another.",
             "format": "int32"
           }
         },
@@ -2383,7 +2383,7 @@
               "integer",
               "string"
             ],
-            "description": "For a history category, how often it happened (periods of a length, redundant adds,\r\n            orphan removes); for current state, 0.",
+            "description": "For a history category, how often it happened (periods of a length, redundant adds,\n            orphan removes); for current state, 0.",
             "format": "int64"
           },
           "share": {
@@ -2514,7 +2514,7 @@
               "null",
               "string"
             ],
-            "description": "The day a daily file last said anything about it, or null when none ever has - meaning it is\r\npresent only because the initial dump listed it and nothing has removed it since.",
+            "description": "The day a daily file last said anything about it, or null when none ever has - meaning it is\npresent only because the initial dump listed it and nothing has removed it since.",
             "format": "date"
           },
           "tac": {
@@ -2609,7 +2609,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Sections the caller is not permitted to see, named rather than silently dropped - an empty\r\nlist and a forbidden list look identical otherwise, and the difference matters."
+            "description": "Sections the caller is not permitted to see, named rather than silently dropped - an empty\nlist and a forbidden list look identical otherwise, and the difference matters."
           },
           "truncated": {
             "type": "boolean",
@@ -2728,7 +2728,7 @@
           },
           "pattern": {
             "type": "string",
-            "description": "The level of this entity together with those bound to it in the 30 days: SuspiciousPattern when\r\nrisk signals of two different families hold among them, otherwise the highest of their levels up\r\nto RiskSignal."
+            "description": "The level of this entity together with those bound to it in the 30 days: SuspiciousPattern when\nrisk signals of two different families hold among them, otherwise the highest of their levels up\nto RiskSignal."
           },
           "linked": {
             "type": "array",
@@ -3349,7 +3349,7 @@
               "integer",
               "string"
             ],
-            "description": "Bindings whose events end in a different state from current state. Zero\r\n            unless a day is part way through being imported.",
+            "description": "Bindings whose events end in a different state from current state. Zero\n            unless a day is part way through being imported.",
             "format": "int32"
           }
         },
