@@ -10,6 +10,7 @@ import { chartColor, withAlpha } from '@/lib/chart-colors'
 import { feedQualityMarkArea, feedQualityTooltip } from '@/lib/feed-quality-bands'
 import { formatCompact, formatFull } from '@/lib/format'
 import { useChartRevision } from '@/lib/appearance'
+import { reportInitOptions, useReportMode } from '@/lib/report-mode'
 import { setThemedOption } from '@/lib/chart-theme'
 import { tooltipBounds } from '@/lib/chart-tooltip'
 import { leaveWheelToPage } from '@/lib/chart-zoom'
@@ -44,6 +45,8 @@ const props = withDefaults(
 const container = ref<HTMLElement | null>(null)
 const chart = shallowRef<echarts.ECharts | null>(null)
 const revision = useChartRevision()
+// In an export: every day drawn, no zoom, the canvas at the export's pixel ratio (lib/report-mode).
+const report = useReportMode()
 
 const flagged = computed(
   () => new Map(props.days.filter((d) => d.flagged.length).map((d) => [d.date, d.flagged.map((c) => CHECK_LABELS[c] ?? c).join(', ')])),
@@ -87,7 +90,7 @@ function render() {
     {
       animation: false,
       legend: { top: 0, right: 0, textStyle: { color: chartColor('--c-text-secondary'), fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
-      grid: { left: 8, right: 8, top: 32, bottom: 46 },
+      grid: { left: 8, right: 8, top: 32, bottom: report ? 24 : 46 },
       tooltip: {
         ...tooltipBounds,
         trigger: 'axis',
@@ -121,7 +124,7 @@ function render() {
         axisLabel: { color: muted, fontSize: 10, formatter: (v: number) => formatCompact(v) },
         splitLine: { lineStyle: { color: border, type: 'dashed' } },
       },
-      dataZoom: [
+      dataZoom: report ? [] : [
         { type: 'inside', start: props.zoomStart, end: 100 },
         {
           type: 'slider',
@@ -145,7 +148,7 @@ let observer: ResizeObserver | null = null
 
 onMounted(() => {
   if (!container.value) return
-  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas' })
+  chart.value = echarts.init(container.value, undefined, { renderer: 'canvas', ...reportInitOptions(report) })
   leaveWheelToPage(container.value)
   render()
   observer = new ResizeObserver(() => chart.value?.resize())
