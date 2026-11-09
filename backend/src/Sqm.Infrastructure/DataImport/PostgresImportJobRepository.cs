@@ -851,8 +851,47 @@ public sealed partial class PostgresImportJobRepository : IImportJobRepository
             status is ImportJobStatus.Completed ? "info" : "warning",
             null, message, counters, ct).ConfigureAwait(false);
 
+        // The integration feed (ADR-024): a day of the binding feed that became effective is published in
+        // this transaction, so the event exists if and only if the import did. Lodestone pulls it and reads
+        // the day's changes through the sync endpoint.
+        if (makeEffective && status is ImportJobStatus.Completed or ImportJobStatus.PartiallyCompleted)
+        {
+            await PublishDayAsync(connection, transaction, jobId, status, counters, superseded, ct).ConfigureAwait(false);
+        }
+
         await transaction.CommitAsync(ct).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>The outbox event for a day of the binding feed that became effective; nothing for any other source.</summary>
+    private async Task PublishDayAsync(
+        Npgsql.NpgsqlConnection connection, System.Data.IDbTransaction transaction, long jobId, ImportJobStatus status,
+        ImportCounters counters, long? superseded, CancellationToken ct)
+    {
+        // As text, so that nothing depends on how a date is mapped inside a tuple.
+        var subject = await connection.ExecuteScalarAsync<string?>(Command(
+            "SELECT business_date::text FROM imports.import_job WHERE id = @job AND source_code = 'SQM'",
+            new { job = jobId }, ct, transaction)).ConfigureAwait(false);
+
+        if (subject is null)
+        {
+            return;
+        }
+
+        var payload = System.Text.Json.JsonSerializer.Serialize(
+            new
+            {
+                businessDate = subject,
+                jobId,
+                status = status.ToDatabaseValue(),
+                rowsImported = counters.RowsInserted,
+                rowsRejected = counters.RowsRejected,
+                replacesJobId = superseded,
+            },
+            Integration.IntegrationOutboxSql.Json);
+
+        await Integration.IntegrationOutboxSql.AppendAsync(
+            connection, transaction, Application.Integration.IntegrationEventTypes.DayImported, subject, payload, ct).ConfigureAwait(false);
     }
 
     /// <summary>Whether <paramref name="workerId"/> holds the job, locking its row if so.</summary>
