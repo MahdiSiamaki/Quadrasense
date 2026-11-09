@@ -200,6 +200,19 @@ services:
       Auth__Delivery__Sms__Body: ${SQM_SMS_BODY:-}
       Auth__Delivery__Sms__SuccessContains: ${SQM_SMS_SUCCESS_CONTAINS:-}
       Auth__Delivery__Sms__Headers__Authorization: ${SQM_SMS_AUTHORIZATION:-}
+      # SMPP, which MCI's gateway speaks. Used in place of the HTTP gateway above when it is set.
+      Auth__Delivery__Smpp__Host: ${SQM_SMPP_HOST:-}
+      Auth__Delivery__Smpp__Port: ${SQM_SMPP_PORT:-2775}
+      Auth__Delivery__Smpp__SystemId: ${SQM_SMPP_SYSTEM_ID:-}
+      Auth__Delivery__Smpp__Password: ${SQM_SMPP_PASSWORD:-}
+      Auth__Delivery__Smpp__SystemType: ${SQM_SMPP_SYSTEM_TYPE:-}
+      Auth__Delivery__Smpp__SourceAddress: ${SQM_SMPP_SOURCE:-}
+      Auth__Delivery__Smpp__SourceTon: ${SQM_SMPP_SOURCE_TON:-0}
+      Auth__Delivery__Smpp__SourceNpi: ${SQM_SMPP_SOURCE_NPI:-0}
+      Auth__Delivery__Smpp__DestinationTon: ${SQM_SMPP_DESTINATION_TON:-1}
+      Auth__Delivery__Smpp__DestinationNpi: ${SQM_SMPP_DESTINATION_NPI:-1}
+      Auth__Delivery__Smpp__DestinationFormat: ${SQM_SMPP_DESTINATION_FORMAT:-International}
+      Auth__Delivery__Smpp__DataCoding: ${SQM_SMPP_DATA_CODING:-0}
     volumes:
       - uploads:/var/lib/quadrasense/uploads
     mem_limit: ${API_MEMORY:-1536m}

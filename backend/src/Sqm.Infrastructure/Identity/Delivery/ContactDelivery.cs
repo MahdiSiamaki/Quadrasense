@@ -15,7 +15,7 @@ public sealed partial class ContactDelivery : IContactDelivery, IDisposable
     private partial void LogRefused();
 
     private readonly SmtpEmailSender? _email;
-    private readonly HttpSmsSender? _sms;
+    private readonly ISmsSender? _sms;
     private readonly bool _writeToLog;
     private readonly ILogger<ContactDelivery> _logger;
 
@@ -34,7 +34,10 @@ public sealed partial class ContactDelivery : IContactDelivery, IDisposable
 
         _logger = logger;
         _email = options.Email.IsConfigured ? new SmtpEmailSender(options.Email) : null;
-        _sms = options.Sms.IsConfigured ? new HttpSmsSender(options.Sms, smsHandler) : null;
+        // SMPP when it is set, which is what MCI's gateway speaks; an HTTP gateway otherwise.
+        _sms = options.Smpp.IsConfigured
+            ? new SmppSmsSender(options.Smpp)
+            : options.Sms.IsConfigured ? new HttpSmsSender(options.Sms, smsHandler) : null;
         _writeToLog = options.WriteToLog && isDevelopment;
 
         if (options.WriteToLog && !isDevelopment)
@@ -70,7 +73,8 @@ public sealed partial class ContactDelivery : IContactDelivery, IDisposable
                 break;
 
             case ContactChannel.Sms when _sms is not null:
-                await _sms.SendAsync(destination, message.Text, ct).ConfigureAwait(false);
+                await _sms.SendAsync(destination, message.Brief ?? message.Text, ct)
+                    .ConfigureAwait(false);
                 break;
 
             default:

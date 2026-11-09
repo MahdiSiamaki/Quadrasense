@@ -273,8 +273,11 @@ public sealed class DeliveryOptions
     /// <summary>The mail server.</summary>
     public SmtpDeliveryOptions Email { get; init; } = new();
 
-    /// <summary>The SMS gateway.</summary>
+    /// <summary>An SMS gateway reached over HTTP.</summary>
     public SmsGatewayOptions Sms { get; init; } = new();
+
+    /// <summary>An SMSC reached over SMPP, as MCI's is. Used in place of HTTP when both are set.</summary>
+    public SmppGatewayOptions Smpp { get; init; } = new();
 
     /// <summary>
     /// Writes every message, code included, to the log instead of sending it. Development only.
@@ -331,8 +334,7 @@ public sealed class SmtpDeliveryOptions
 /// in a form body, JSON-escaped in a JSON body.
 /// </para>
 /// <para>
-/// A gateway that speaks SMPP rather than HTTP needs its own implementation of
-/// <c>IContactDelivery</c>; nothing above that interface would change.
+/// MCI's gateway speaks SMPP, which <see cref="SmppGatewayOptions"/> describes.
 /// </para>
 /// </remarks>
 public sealed class SmsGatewayOptions
@@ -362,4 +364,64 @@ public sealed class SmsGatewayOptions
 
     /// <summary>Whether enough is configured to send anything.</summary>
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Url);
+}
+
+/// <summary>An SMSC reached over SMPP 3.4, as a transmitter.</summary>
+/// <remarks>
+/// The values come from whoever runs the SMSC: the address, the account (<c>system_id</c> and its
+/// password), the sender address texts appear from, and how that sender and the destination are
+/// typed (TON and NPI). The defaults are the common ones: a sender of unknown type, and a destination
+/// in international form (TON 1, NPI 1, <c>989123456789</c>).
+/// </remarks>
+public sealed class SmppGatewayOptions
+{
+    /// <summary>The SMSC's host. Empty turns SMPP off.</summary>
+    public string? Host { get; init; }
+
+    /// <summary>Its port. 2775 is SMPP's usual one.</summary>
+    public int Port { get; init; } = 2775;
+
+    /// <summary>The account, <c>system_id</c>: at most 15 characters.</summary>
+    public string? SystemId { get; init; }
+
+    /// <summary>Its password: at most 8 characters, as SMPP 3.4 has it.</summary>
+    public string? Password { get; init; }
+
+    /// <summary><c>system_type</c>, when the SMSC asks for one.</summary>
+    public string SystemType { get; init; } = string.Empty;
+
+    /// <summary>The sender: a short code, a number, or a name.</summary>
+    public string? SourceAddress { get; init; }
+
+    /// <summary>The sender's type of number: 0 unknown, 1 international, 3 network-specific, 5 alphanumeric.</summary>
+    public byte SourceTon { get; init; }
+
+    /// <summary>The sender's numbering plan: 0 unknown, 1 E.164.</summary>
+    public byte SourceNpi { get; init; }
+
+    /// <summary>The destination's type of number.</summary>
+    public byte DestinationTon { get; init; } = 1;
+
+    /// <summary>The destination's numbering plan.</summary>
+    public byte DestinationNpi { get; init; } = 1;
+
+    /// <summary>
+    /// <c>International</c> sends <c>989123456789</c>; <c>National</c> sends <c>09123456789</c>.
+    /// </summary>
+    public string DestinationFormat { get; init; } = "International";
+
+    /// <summary>The country code <c>National</c> takes off.</summary>
+    public string CountryCode { get; init; } = "98";
+
+    /// <summary>0, the SMSC's default alphabet (GSM 03.38); 3, Latin-1; 8, UCS-2.</summary>
+    public byte DataCoding { get; init; }
+
+    /// <summary>How long one message may take, connection to sign-out.</summary>
+    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>Whether enough is configured to send anything.</summary>
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(Host)
+        && !string.IsNullOrWhiteSpace(SystemId)
+        && !string.IsNullOrWhiteSpace(SourceAddress);
 }

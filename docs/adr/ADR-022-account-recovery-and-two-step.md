@@ -111,10 +111,19 @@ told how long it lasts. It does not skip the second step on the next full sign-i
 ## Decision 8: what leaves the building is configuration
 
 `IContactDelivery` is the seam. E-mail is SMTP through MailKit, which Microsoft's documentation names in place of
-`System.Net.Mail.SmtpClient`. SMS is one HTTP request described entirely by configuration, because gateways have no
-common protocol: URL, method, headers and a body with `{to}`, `{toDigits}`, `{toNational}` and `{text}`, each
-escaped for where it lands. A gateway speaking SMPP needs its own implementation of that interface, and nothing
-above it changes.
+`System.Net.Mail.SmtpClient`. SMS goes one of two ways:
+
+- **SMPP 3.4**, which the owner confirmed on 2026-11-09 is what MCI's gateway speaks. A connection per message:
+  bind as a transmitter, submit, unbind, answering the SMSC's link check if it asks meanwhile. Written here rather
+  than taken from a library, because the maintained .NET SMPP libraries are commercial and a transmitter needs a
+  few fixed records. Text goes in the SMSC's default alphabet, GSM 03.38, where `@`, `$` and `_` are not their ASCII
+  codes; a text too long for one part goes whole in `message_payload` rather than being split by us. Every message
+  the system sends has a brief of at most 160 characters, so a code arrives in one part.
+- **An HTTP request** described entirely by configuration, for any other gateway: URL, method, headers and a body
+  with `{to}`, `{toDigits}`, `{toNational}` and `{text}`, each escaped for where it lands.
+
+SMPP is used when both are set. Neither is tried against MCI's real SMSC yet: `SmppSenderTests` plays the SMSC,
+field by field.
 
 A channel with nothing configured is off, `GET auth/options` says so, and the sign-in page keeps "ask your
 administrator". A failure records what came back and never the text, which holds the code, or the address, which
