@@ -81,7 +81,7 @@ decisions some of these wait on are numbered in `docs/operations/deployment/READ
 | **Red Hat UBI base images** | The red lines name Red Hat as the OS (§1-1 row 3); UBI's .NET 10 image did not pull from the laptop on 2026-10-22 | A build argument per Dockerfile, then the verification of `01-container-images.md` again | Decision 9 |
 | **Backups, automated, with a restore test** | None exist; the originals are kept but have no copy of their own (`02-…` §6, `03-…` §5) | Scripts or CronJobs; a quarterly restore | A destination; RPO/RTO (decision 14) |
 | **Audit trail to the SOC** | The red lines want every log at the SOC (§2-4); ours is a PostgreSQL table | An export in the SOC's format | The SOC's format |
-| **Captcha on the login page** | Red lines §2-3; conflicts with English-only | Self-hosted; Persian if required | Decision 6 |
+| **Captcha on the login page** | Red lines §2-3 row 3: hidden at first, shown after three failed logins, Persian digits and letters in several Persian fonts, at least ten patterns, resistant to OCR, with an on-screen keyboard. **Decided 2026-11-09: required, as the one exception to English-only** | Self-hosted, every font in the image (row 4 of §1-3); medium | The MCI release: built for it, not before |
 | **High availability: PostgreSQL replication, ClickHouse replication with Keeper, a second site** | Red lines §2-3; `03-…` §5 sizes each | Medium to large; ClickHouse's is a migration of every table | Decision 7 |
 
 ## Identity and access (recorded as not built)
@@ -93,4 +93,4 @@ decisions some of these wait on are numbered in `docs/operations/deployment/READ
 | A notice to the old contact when one changes | A hijacked session can change a contact, though it cannot prove the new one without the password. Telling the old address is the standard extra. Small: the update already knows both values (ADR-022) |
 | An SMPP sender | `IContactDelivery` takes one if MCI's gateway speaks SMPP rather than HTTP. Waits on knowing the gateway |
 | Rotating the two-step key | One key today; a key id on each secret would allow a second during a change. Nothing needs it yet. Small |
-| Captcha after three failures | Red line 2-3 row 3; waits on decision 2 of `docs/operations/deployment/04-security-red-lines.md` |
+| Captcha after three failures | Decided 2026-11-09: built for the MCI release; see Deployment above |

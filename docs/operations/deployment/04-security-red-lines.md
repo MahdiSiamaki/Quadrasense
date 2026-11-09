@@ -30,8 +30,9 @@ Five rows below cannot be closed by engineering alone. They are repeated in `REA
    needs the security office's approval, and the support burden is the owner's (§2-1). ADR-003 holds
    the evidence for it: 26-35x faster than the alternatives on the dashboard queries, 3.4x smaller.
 2. **A captcha with Persian digits and letters** is required on the login page after three failed
-   attempts (§2-3). The product is English-only by the owner's decision (CLAUDE.md). One of the two
-   has to give, or the security office has to grant an exception.
+   attempts (§2-3). The product is English-only by the owner's decision (CLAUDE.md). **Decided
+   2026-11-09 by the owner: the red line comes first.** The captcha is built for the release that goes
+   to MCI's infrastructure, as the one place Persian appears in the interface, and not before.
 3. **Clustering, and a second site running active-active** (§2-3). Today every store is one node.
    This is the largest architecture change in the list - see `03-mci-openshift.md`, "High
    availability".

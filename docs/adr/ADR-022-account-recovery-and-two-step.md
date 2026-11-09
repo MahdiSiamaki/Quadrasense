@@ -131,7 +131,7 @@ may hold a key. Writing messages to the log exists for development and is refuse
 | Signing in at the end of recovery | A way around the second step |
 | ASP.NET Data Protection for the secret | Wants a shared writable key ring; the containers have neither |
 | Trusting a device for thirty days after the second step | Another credential to store and revoke, for a step taken once a week |
-| A captcha now | Red line 2-3 row 3 wants one in Persian, against English-only: decision 2 of `docs/operations/deployment/04-security-red-lines.md`, still open. The lockout and the limiters stand in the meantime |
+| A captcha now | Red line 2-3 row 3 wants one in Persian, against English-only. On 2026-11-09 the owner decided that the red lines come first: the captcha is required, and built for the MCI release rather than now. The lockout and the limiters stand in the meantime |
 
 ## Consequences
 

@@ -180,7 +180,7 @@ Each step names what it is - **T** technical/infrastructure, **P** programming, 
 
 | # | Step | Kind | Waits on |
 |---|---|---|---|
-| 1 | Settle the five decisions in `04-…` and the README's list (ClickHouse approval, captcha, HA, synthetic data, intake path) | R | The owner; the security office |
+| 1 | Settle the five decisions in `04-…` and the README's list (ClickHouse approval, HA, synthetic data, intake path; the captcha was decided on 2026-11-09) | R | The owner; the security office |
 | 2 | Domain accounts, PAM and terminal-server access for whoever deploys; `oc`/`kubectl` on the terminal server | R | 1 |
 | 3 | Request namespaces dev, uat, prd with the storage of section 4; a GitLab group and runner; Nexus hosted repository. **Namespaces, GitLab group and Nexus delivered 2026-10-31 (section 1a)**; storage and the runner are still to confirm | R | 1 |
 | 4 | Source into MCI GitLab; `.gitlab-ci.yml` (section 3) | T | 3 |
@@ -188,7 +188,7 @@ Each step names what it is - **T** technical/infrastructure, **P** programming, 
 | 6 | Synthetic data generator, and a data set from it | P | - |
 | 7 | Deploy dev; run the acceptance checks of `02-…` against it | T | 4, 5 |
 | 8 | ClickHouse least-privilege GRANTs, tested endpoint by endpoint | P | 7 |
-| 9 | Captcha (if decided), admin-path separation (if decided) | P | 1 |
+| 9 | The Persian captcha (decided 2026-11-09: required for this release), admin-path separation (if decided) | P | 1 |
 | 10 | Metrics endpoint; Grafana; alerts; log forwarding; audit export | P, R | 7 |
 | 11 | Backups (section 5) and a restore test | T | 7 |
 | 12 | Ingress IP and TLS certificate from the internal CA | R | 7 |
