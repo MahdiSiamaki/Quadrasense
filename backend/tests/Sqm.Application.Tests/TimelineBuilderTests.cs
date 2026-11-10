@@ -113,4 +113,24 @@ public sealed class TimelineBuilderTests
         Assert.True(TimelineBuilder.Build(TimelineCentre.Imei, Imei, stored, All(), 3, null).Truncated);
         Assert.False(TimelineBuilder.Build(TimelineCentre.Imei, Imei, Handset(), All(), 3, null).Truncated);
     }
+
+    [Theory]
+    [InlineData(TimelineCentre.Msisdn)]
+    [InlineData(TimelineCentre.Imsi)]
+    [InlineData(TimelineCentre.Imei)]
+    public void An_identifier_nobody_holds_has_an_empty_timeline_not_an_error(TimelineCentre centre)
+    {
+        // It threw until 2026-11-10: every lookup of an identifier PI does not hold answered 500, in the
+        // Explorer's timeline and in the integration API, where "found: false" was documented and unreachable.
+        var nothing = new StoredTimeline([], Total: 0, ElapsedMs: 3, RowsRead: 8_192);
+
+        var t = TimelineBuilder.Build(centre, "9120000000", nothing, All(), 10_000, new DateOnly(2026, 10, 31));
+
+        Assert.Empty(t.Bindings);
+        Assert.Empty(t.Groups);
+        Assert.Equal((0, 0, 0, 0, 0), (t.Summary.Bindings, t.Summary.ActiveBindings, t.Summary.Numbers, t.Summary.Sims, t.Summary.Handsets));
+        Assert.Equal((null, false, null), (t.Summary.FirstSeen, t.Summary.FirstSeenIsDumpWindow, t.Summary.LastChange));
+        Assert.Equal(("9120000000", false, "2026-10-31"), (t.Identifier, t.Truncated, t.DataThrough));
+        Assert.Equal((null, null, null), (t.Tac, t.Brand, t.Model));
+    }
 }
