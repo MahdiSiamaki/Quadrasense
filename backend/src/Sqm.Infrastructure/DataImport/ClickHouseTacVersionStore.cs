@@ -275,6 +275,16 @@ public sealed partial class ClickHouseTacVersionStore : ITacVersionStore
     /// once kept the TACs with one fingerprint instead - the untouched ones - and reported
     /// 113,038,260 bindings for the 4 October 2026 file's 153 changes.
     /// </para>
+    /// <para>
+    /// <b>Read from the per-model mart, not from current state.</b> It was a count over
+    /// <c>binding_current FINAL</c>, which reads every row version the table holds. On 2026-11-10 that was
+    /// 1.26 billion rows on the department's server: the statement ran past the client's three-minute timeout on each of
+    /// three attempts, the import of the 9 November catalogue failed there, and each attempt left its statement
+    /// running after it had given up. On the laptop, with 958 million rows, it took 290 s. The mart already holds
+    /// the active bindings of every TAC at the last published delivery - the figure the Devices page shows for a
+    /// model - and the same question read from it answered 69, as the scan did, in 218 ms. So the count is as of
+    /// that delivery, and it leaves out the rows with no handset, as every count does (ADR-020).
+    /// </para>
     /// </remarks>
     private async Task<long> CountAffectedBindingsAsync(
         int versionId, int againstVersionId, CancellationToken ct)
@@ -288,9 +298,10 @@ public sealed partial class ClickHouseTacVersionStore : ITacVersionStore
                 GROUP BY tac
                 HAVING count() = 1 OR min({fingerprint}) != max({fingerprint})
             )
-            SELECT count()
-            FROM {_database}.binding_current FINAL
-            WHERE active = 1 AND tac IN (SELECT tac FROM changed)
+            SELECT sum(bindings)
+            FROM {_database}.agg_device_model
+            WHERE seq = (SELECT max(seq) FROM {_database}.mart_ready)
+              AND tac IN (SELECT tac FROM changed)
             """;
 
         var value = await ScalarAsync(sql, ct).ConfigureAwait(false);
