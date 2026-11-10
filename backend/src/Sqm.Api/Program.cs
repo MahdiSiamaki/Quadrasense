@@ -421,6 +421,7 @@ app.MapIntegrationInventoryEndpoints();
 app.MapIntegrationEventEndpoints();
 app.MapIntegrationStatusEndpoints();
 app.MapIntegrationClientEndpoints();
+app.MapIntegrationGuideEndpoints();
 
 await app.RunAsync().ConfigureAwait(false);
 

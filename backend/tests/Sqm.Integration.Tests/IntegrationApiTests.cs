@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -729,6 +730,31 @@ public sealed class IntegrationApiTests : IClassFixture<WebApplicationFactory<Pr
         Assert.All(paths, p => Assert.StartsWith("/api/integration/v1/", p, StringComparison.Ordinal));
         var flow = document.GetProperty("components").GetProperty("securitySchemes").GetProperty("oauth2").GetProperty("flows").GetProperty("clientCredentials");
         Assert.Equal("/api/integration/v1/oauth/token", flow.GetProperty("tokenUrl").GetString());
+    }
+
+    [Fact]
+    public async Task The_guides_document_is_for_anyone_signed_in_and_is_the_one_the_API_publishes()
+    {
+        // The API guide under Settings reads the contract from the server it describes (ADR-024, 2026-11-10).
+        using var anonymous = await SendAsync(HttpMethod.Get, IntegrationGuideEndpoints.Route, null, null);
+        using var asSystem = await SendAsync(HttpMethod.Get, IntegrationGuideEndpoints.Route, null, Token(IntegrationScopes.InventoryRead));
+        // The analyst holds no integration permission: reading the contract needs none.
+        using var signedIn = await SendAsync(HttpMethod.Get, IntegrationGuideEndpoints.Route, null, null, session: "analyst");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, asSystem.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, signedIn.StatusCode);
+        Assert.Equal("application/json", signedIn.Content.Headers.ContentType?.MediaType);
+
+        using var client = _factory.CreateClient();
+        using var published = await client.GetAsync("/openapi/integration-v1.json", Ct);
+        var expected = JsonNode.Parse(await published.Content.ReadAsStringAsync(Ct))!.AsObject();
+        var served = JsonNode.Parse(await signedIn.Content.ReadAsStringAsync(Ct))!.AsObject();
+        // The server address is whichever host asked, and the guide shows its own.
+        expected.Remove("servers");
+        Assert.False(served.ContainsKey("servers"));
+        Assert.True(JsonNode.DeepEquals(expected, served), "the guide must read the document the API publishes");
+        Assert.Contains("/api/integration/v1/inventory/lookup", served["paths"]!.AsObject().Select(p => p.Key));
     }
 
     // ------------------------------------------------------------------ helpers
