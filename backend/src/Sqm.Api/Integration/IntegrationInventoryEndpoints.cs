@@ -51,7 +51,7 @@ public static class IntegrationInventoryEndpoints
 
         api.MapPost("/inventory/lookup", LookupAsync).RequireAuthorization(read)
             .WithName("IntegrationLookup")
-            .WithSummary("A number, SIM (IMSI or ICCID) or handset: its bindings, active and ended, with derived ICCIDs and models.")
+            .WithSummary("A number, SIM (IMSI or ICCID) or handset: its bindings, active and ended, with derived ICCIDs and each handset's model, type and capabilities.")
             .Produces<InventoryLookupResponse>().ProducesValidationProblem().ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
         api.MapPost("/inventory/lookup/batch", BatchAsync).RequireAuthorization(read)
@@ -90,8 +90,8 @@ public static class IntegrationInventoryEndpoints
     // ------------------------------------------------------------------ lookup
 
     private static async Task<IResult> LookupAsync(
-        IdentifierRequest request, HttpContext http, ITimelineStore timelines, IAuditLog audit, IOptions<IntegrationOptions> options,
-        CancellationToken ct)
+        IdentifierRequest request, HttpContext http, ITimelineStore timelines, IDeviceAnalyticsStore devices, IAuditLog audit,
+        IOptions<IntegrationOptions> options, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         var client = CurrentClient.Require(http);
@@ -102,7 +102,9 @@ public static class IntegrationInventoryEndpoints
         }
 
         var masking = new IdentifierMasking(client.Has(IntegrationScopes.IdentifiersReveal), id);
-        var (answer, unavailable) = await LookupCoreAsync(id, timelines, masking, options.Value.MaxBindings, ct).ConfigureAwait(false);
+        var (answer, unavailable) = await LookupCoreAsync(
+            id, timelines, devices, new Dictionary<string, DeviceModelFacts?>(StringComparer.Ordinal), masking, options.Value.MaxBindings, ct)
+            .ConfigureAwait(false);
         if (answer is null)
         {
             return unavailable!;
@@ -119,8 +121,8 @@ public static class IntegrationInventoryEndpoints
     }
 
     private static async Task<IResult> BatchAsync(
-        BatchLookupRequest request, HttpContext http, ITimelineStore timelines, IAuditLog audit, IOptions<IntegrationOptions> options,
-        CancellationToken ct)
+        BatchLookupRequest request, HttpContext http, ITimelineStore timelines, IDeviceAnalyticsStore devices, IAuditLog audit,
+        IOptions<IntegrationOptions> options, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         var client = CurrentClient.Require(http);
@@ -135,6 +137,8 @@ public static class IntegrationInventoryEndpoints
         // and a batch is a client's convenience, not a reason to take the store from everybody else.
         var reveal = client.Has(IntegrationScopes.IdentifiersReveal);
         var items = new List<BatchLookupItem>(identifiers.Count);
+        // One catalogue read per model in the whole batch, not per identifier: fifty numbers share few models.
+        var models = new Dictionary<string, DeviceModelFacts?>(StringComparer.Ordinal);
         for (var i = 0; i < identifiers.Count; i++)
         {
             var one = identifiers[i];
@@ -145,8 +149,8 @@ public static class IntegrationInventoryEndpoints
                 continue;
             }
 
-            var (answer, unavailable) = await LookupCoreAsync(id, timelines, new IdentifierMasking(reveal, id), options.Value.MaxBindings, ct)
-                .ConfigureAwait(false);
+            var (answer, unavailable) = await LookupCoreAsync(
+                id, timelines, devices, models, new IdentifierMasking(reveal, id), options.Value.MaxBindings, ct).ConfigureAwait(false);
             if (answer is null)
             {
                 return unavailable!;
@@ -168,8 +172,14 @@ public static class IntegrationInventoryEndpoints
     }
 
     /// <summary>One identifier's bindings, from the binding history; or the answer that says why not.</summary>
+    /// <remarks>
+    /// Each binding says what its handset is - type, operating system, LTE, 5G, eSIM - so that "the devices of
+    /// this number" is one call (owner, 2026-11-10). They come from the active catalogue, read once for the
+    /// models not yet in <paramref name="models"/>; a model's full record stays the device model route's.
+    /// </remarks>
     private static async Task<(InventoryLookupResponse? Answer, IResult? Unavailable)> LookupCoreAsync(
-        InventoryIdentifier id, ITimelineStore timelines, IdentifierMasking masking, int max, CancellationToken ct)
+        InventoryIdentifier id, ITimelineStore timelines, IDeviceAnalyticsStore devices, Dictionary<string, DeviceModelFacts?> models,
+        IdentifierMasking masking, int max, CancellationToken ct)
     {
         if (await HistoryRefusalAsync(timelines, ct).ConfigureAwait(false) is { } refused)
         {
@@ -183,13 +193,28 @@ public static class IntegrationInventoryEndpoints
         // Built unmasked so that each ICCID is derived from its real IMSI; masked below, field by field.
         var timeline = TimelineBuilder.Build(centre, digits, stored, Full, max, through);
 
+        var unread = timeline.Bindings.Select(b => b.Tac).OfType<string>().Where(t => t.Length > 0 && !models.ContainsKey(t))
+            .Distinct(StringComparer.Ordinal).ToList();
+        if (unread.Count > 0)
+        {
+            var read = await devices.GetModelFactsAsync(unread, ct).ConfigureAwait(false);
+            foreach (var tac in unread)
+            {
+                // Null is remembered too: a TAC the catalogue does not list is not asked about again.
+                models[tac] = read.GetValueOrDefault(tac);
+            }
+        }
+
         var bindings = timeline.Bindings.Select(b =>
         {
             var imsi = b.Imsi ?? string.Empty;
+            var model = b.Tac is { Length: > 0 } tac ? models.GetValueOrDefault(tac) : null;
             return new InventoryBindingInfo(
                 masking.Msisdn(b.Msisdn ?? string.Empty), masking.Imsi(imsi), masking.Iccid(Iccid.FromImsi(imsi)), "derived",
-                masking.Imei(b.Imei ?? string.Empty), b.Tac, b.Brand, b.Model, b.Active, b.FirstSeen, b.FirstSeenIsDumpWindow,
-                b.LastChange);
+                masking.Imei(b.Imei ?? string.Empty), b.Tac, b.Brand, b.Model,
+                model?.DeviceType, model?.OperatingSystem,
+                model is null ? null : new HandsetCapabilitiesInfo(model.HasLte, model.Has5g, model.HasEsim),
+                b.Active, b.FirstSeen, b.FirstSeenIsDumpWindow, b.LastChange);
         }).ToList();
 
         return (new InventoryLookupResponse(

@@ -84,7 +84,7 @@
         "tags": [
           "Integration: inventory"
         ],
-        "summary": "A number, SIM (IMSI or ICCID) or handset: its bindings, active and ended, with derived ICCIDs and models.",
+        "summary": "A number, SIM (IMSI or ICCID) or handset: its bindings, active and ended, with derived ICCIDs and each handset's model, type and capabilities.",
         "operationId": "IntegrationLookup",
         "requestBody": {
           "content": {
@@ -1599,6 +1599,38 @@
         },
         "description": "Each day's file judged against the ordinary days, and what \"ordinary\" was."
       },
+      "HandsetCapabilitiesInfo": {
+        "required": [
+          "lte",
+          "fiveG",
+          "esim"
+        ],
+        "type": "object",
+        "properties": {
+          "lte": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "LTE."
+          },
+          "fiveG": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "5G."
+          },
+          "esim": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "An eUICC."
+          }
+        },
+        "description": "What a binding's handset can do, by its model in the active GSMA catalogue; null where the catalogue does\nnot say. The model's full record - bands, SIM slots, NFC - is the device model route's."
+      },
       "HttpValidationProblemDetails": {
         "type": "object",
         "properties": {
@@ -1657,14 +1689,14 @@
               "null",
               "string"
             ],
-            "description": "A phone number (10 digits), an IMSI (15), an ICCID (19) or an IMEI (14)."
+            "description": "A phone number (10 digits, with or without a country code), an IMSI (15), an ICCID (19) or an IMEI: its 14\ndigits, 15 with its check digit, or 16 as an IMEISV."
           },
           "kind": {
             "type": [
               "null",
               "string"
             ],
-            "description": "msisdn, imsi, iccid or imei; read from the length when left out."
+            "description": "msisdn, imsi, iccid or imei; read from the length when left out. Fifteen digits are an IMSI unless this\nsays imei."
           }
         },
         "description": "One identifier to resolve. In the body, never the URL (MCI red lines, §2-3 row 7)."
@@ -1825,6 +1857,9 @@
           "tac",
           "brand",
           "model",
+          "deviceType",
+          "operatingSystem",
+          "capabilities",
           "active",
           "firstSeen",
           "firstSeenIsDumpWindow",
@@ -1876,6 +1911,31 @@
             ],
             "description": "The model's marketing name."
           },
+          "deviceType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The model's GSMA device type: Smartphone, Modem, IoT Device and so on."
+          },
+          "operatingSystem": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The model's operating system."
+          },
+          "capabilities": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "What the model can do; null when the active catalogue does not list the TAC.",
+                "$ref": "#/components/schemas/HandsetCapabilitiesInfo"
+              }
+            ]
+          },
           "active": {
             "type": "boolean",
             "description": "Still active."
@@ -1924,7 +1984,7 @@
           },
           "identifier": {
             "type": "string",
-            "description": "As sent."
+            "description": "The identifier as PI holds it: a number as its ten digits, an IMEI as its fourteen; an ICCID as sent."
           },
           "resolvedImsi": {
             "type": [
@@ -2013,7 +2073,7 @@
           },
           "identifier": {
             "type": "string",
-            "description": "As sent."
+            "description": "The identifier as PI holds it: a number as its ten digits, an IMEI as its fourteen; an ICCID as sent."
           },
           "resolvedImsi": {
             "type": [
@@ -2056,7 +2116,7 @@
           },
           "identifier": {
             "type": "string",
-            "description": "As sent."
+            "description": "The identifier as PI holds it: a number as its ten digits, an IMEI as its fourteen; an ICCID as sent."
           },
           "resolvedImsi": {
             "type": [

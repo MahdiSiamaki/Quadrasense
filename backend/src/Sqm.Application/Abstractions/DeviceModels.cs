@@ -105,6 +105,14 @@ public sealed record DeviceRow(
 public sealed record DeviceModelIdentity(
     string? Brand, string? Manufacturer, string? MarketingName);
 
+/// <summary>What the active catalogue says a TAC is and can do, without any figure from the network.</summary>
+/// <param name="DeviceType">The GSMA device type: Smartphone, Modem, IoT Device and so on.</param>
+/// <param name="OperatingSystem">The operating system.</param>
+/// <param name="HasLte">LTE; null where the catalogue does not say.</param>
+/// <param name="Has5g">5G; null where the catalogue does not say.</param>
+/// <param name="HasEsim">An eUICC; null where the catalogue does not say.</param>
+public sealed record DeviceModelFacts(string? DeviceType, string? OperatingSystem, bool? HasLte, bool? Has5g, bool? HasEsim);
+
 /// <summary>A page of the catalogue, with what it cost.</summary>
 /// <param name="Rows">The page.</param>
 /// <param name="Total">Matching models before paging.</param>

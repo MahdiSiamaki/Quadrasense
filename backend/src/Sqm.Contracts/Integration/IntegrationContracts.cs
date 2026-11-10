@@ -28,8 +28,14 @@ public sealed record TokenError(
 // --------------------------------------------------------------------- requests
 
 /// <summary>One identifier to resolve. In the body, never the URL (MCI red lines, §2-3 row 7).</summary>
-/// <param name="Identifier">A phone number (10 digits), an IMSI (15), an ICCID (19) or an IMEI (14).</param>
-/// <param name="Kind">msisdn, imsi, iccid or imei; read from the length when left out.</param>
+/// <param name="Identifier">
+/// A phone number (10 digits, with or without a country code), an IMSI (15), an ICCID (19) or an IMEI: its 14
+/// digits, 15 with its check digit, or 16 as an IMEISV.
+/// </param>
+/// <param name="Kind">
+/// msisdn, imsi, iccid or imei; read from the length when left out. Fifteen digits are an IMSI unless this
+/// says imei.
+/// </param>
 public sealed record IdentifierRequest(string? Identifier, string? Kind = null);
 
 /// <summary>Several identifiers at once.</summary>
@@ -60,7 +66,7 @@ public sealed record DeclaredEventsDelivery(IReadOnlyList<DeclaredEventInput>? E
 
 /// <summary>What PI knows of one identifier: its bindings, now and before.</summary>
 /// <param name="Kind">msisdn, imsi, iccid or imei.</param>
-/// <param name="Identifier">As sent.</param>
+/// <param name="Identifier">The identifier as PI holds it: a number as its ten digits, an IMEI as its fourteen; an ICCID as sent.</param>
 /// <param name="ResolvedImsi">For an ICCID, the IMSI the operator's numbering derives it from.</param>
 /// <param name="Found">Whether any binding holds it.</param>
 /// <param name="Summary">Counts across its bindings.</param>
@@ -94,13 +100,26 @@ public sealed record InventorySummary(
 /// <param name="Tac">The handset's model: its first eight digits.</param>
 /// <param name="Brand">The model's brand, from the active GSMA catalogue.</param>
 /// <param name="Model">The model's marketing name.</param>
+/// <param name="DeviceType">The model's GSMA device type: Smartphone, Modem, IoT Device and so on.</param>
+/// <param name="OperatingSystem">The model's operating system.</param>
+/// <param name="Capabilities">What the model can do; null when the active catalogue does not list the TAC.</param>
 /// <param name="Active">Still active.</param>
 /// <param name="FirstSeen">The first day the feed named this binding.</param>
 /// <param name="FirstSeenIsDumpWindow">That day is the initial dump's.</param>
 /// <param name="LastChange">The last day it changed.</param>
 public sealed record InventoryBindingInfo(
     string Msisdn, string Imsi, string? Iccid, string IccidSource, string Imei, string? Tac, string? Brand, string? Model,
+    string? DeviceType, string? OperatingSystem, HandsetCapabilitiesInfo? Capabilities,
     bool Active, string? FirstSeen, bool FirstSeenIsDumpWindow, string? LastChange);
+
+/// <summary>
+/// What a binding's handset can do, by its model in the active GSMA catalogue; null where the catalogue does
+/// not say. The model's full record - bands, SIM slots, NFC - is the device model route's.
+/// </summary>
+/// <param name="Lte">LTE.</param>
+/// <param name="FiveG">5G.</param>
+/// <param name="Esim">An eUICC.</param>
+public sealed record HandsetCapabilitiesInfo(bool? Lte, bool? FiveG, bool? Esim);
 
 /// <summary>One identifier of a batch, resolved or refused.</summary>
 /// <param name="Index">Its place in the request.</param>
@@ -115,7 +134,7 @@ public sealed record BatchLookupResponse(IReadOnlyList<BatchLookupItem> Items);
 
 /// <summary>One identifier's history: every binding over time, and what was declared about it.</summary>
 /// <param name="Kind">msisdn, imsi, iccid or imei.</param>
-/// <param name="Identifier">As sent.</param>
+/// <param name="Identifier">The identifier as PI holds it: a number as its ten digits, an IMEI as its fourteen; an ICCID as sent.</param>
 /// <param name="ResolvedImsi">For an ICCID, the IMSI it resolves to.</param>
 /// <param name="Timeline">The observed history, as the Explorer's timeline draws it.</param>
 /// <param name="Declared">What CRM declared about the number or the SIM, newest first; empty for a handset.</param>
@@ -193,7 +212,7 @@ public sealed record DeviceCapabilitiesInfo(
 /// something is eligible, blocked or grey-listed is Tessera's to say.
 /// </summary>
 /// <param name="Kind">msisdn, imsi, iccid or imei.</param>
-/// <param name="Identifier">As sent.</param>
+/// <param name="Identifier">The identifier as PI holds it: a number as its ten digits, an IMEI as its fourteen; an ICCID as sent.</param>
 /// <param name="ResolvedImsi">For an ICCID, the IMSI it resolves to.</param>
 /// <param name="Found">Whether any binding holds it.</param>
 /// <param name="Summary">Counts across its bindings.</param>
