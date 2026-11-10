@@ -43,7 +43,7 @@ system.
 
 | Source system | Target system | Data | Direction | Integration type | API / event | Authentication | Implementation status |
 |---|---|---|---|---|---|---|---|
-| Lodestone | PI | A number, SIM (IMSI or ICCID) or handset: its bindings, derived ICCIDs, models | Lodestone pulls from PI | REST, request/response | `POST /api/integration/v1/inventory/lookup` | OAuth 2.0 client credentials, `inventory.read` (+ `identifiers.reveal` for full identifiers) | **Implemented** |
+| Lodestone | PI | A number, SIM (IMSI or ICCID) or handset (an IMEI of 14, 15 or 16 digits): its bindings, derived ICCIDs, and each handset's model, type and capabilities | Lodestone pulls from PI | REST, request/response | `POST /api/integration/v1/inventory/lookup` | OAuth 2.0 client credentials, `inventory.read` (+ `identifiers.reveal` for full identifiers) | **Implemented** |
 | Lodestone | PI | Up to 50 identifiers at once | Lodestone pulls | REST | `POST /inventory/lookup/batch` | `inventory.read` | **Implemented** |
 | Lodestone | PI | Everything connected to an identifier, with counts | Lodestone pulls | REST | `POST /inventory/relationships` | `inventory.read` | **Implemented** |
 | Lodestone | PI | Binding history (periods and events) and what CRM declared | Lodestone pulls | REST | `POST /inventory/history` | `inventory.read` | **Implemented** |
@@ -95,5 +95,5 @@ What the landscape asks of PI, against what PI's API offered before this work an
 | D2 | Who owns eSIM profile state and stock | Doc 20, question 4; PI has no eUICC feed | The owner's |
 | D3 | Lodestone's event backbone | Doc 20, question 11; PI's feed is pull, which works with any backbone Lodestone chooses | Keep pull until Lodestone names a broker and MCI allows egress |
 | D4 | mTLS between Lodestone and PI | MCI's ingress and certificates (red lines §2-1 row 8) | Ask with the stage 2 network request |
-| D5 | A settings page for integration clients | Today an administrator uses the API | Build it when the first real client is registered |
-| D6 | Expose the integration OpenAPI document in production | It is served in Development only, as the UI's is | Keep the committed copy as the reference; expose only if Lodestone's developers need it live |
+| D5 | A settings page for integration clients | Today an administrator uses the API | **Decided 2026-11-10 (owner): build it now**, beside the API guide. Until it is merged, an administrator still uses the API |
+| D6 | Expose the integration OpenAPI document in production | It is served in Development only, as the UI's is | **Decided 2026-11-10 (owner): readable in the product by anyone signed in.** `GET /api/v1/integration/openapi` serves the document the running server generates, behind a session and no permission; the anonymous `/openapi` routes stay Development's (ADR-024, amendments) |
