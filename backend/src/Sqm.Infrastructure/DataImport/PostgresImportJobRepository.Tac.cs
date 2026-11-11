@@ -290,7 +290,7 @@ public sealed partial class PostgresImportJobRepository
                 $"First file for {sourceCode}; its {columns.Count} columns are now the contract.");
         }
 
-        var (verdict, explanation) = SchemaFingerprint.Compare(current.columns, columns);
+        var (verdict, explanation) = SchemaFingerprint.Compare(current.Columns, columns);
 
         if (verdict == SchemaVerdict.Rejected)
         {
@@ -306,7 +306,7 @@ public sealed partial class PostgresImportJobRepository
         await AppendEventCoreAsync(
             connection, transaction, jobId, "warning", "VALIDATING",
             $"New schema version {label}. {explanation}",
-            new { previous = current.version, added = columns.Skip(current.columns.Length) }, ct)
+            new { previous = current.version, added = columns.Skip(current.Columns.Length) }, ct)
             .ConfigureAwait(false);
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
@@ -364,5 +364,17 @@ public sealed partial class PostgresImportJobRepository
 
     private sealed record SchemaRow(int id, string version);
 
-    private sealed record CurrentSchemaRow(int id, string version, string[] columns);
+    /// <remarks>
+    /// <c>Array</c>, not <c>string[]</c>: Npgsql reports a <c>text[]</c> column's type as
+    /// <see cref="Array"/>, and Dapper builds a record through the constructor whose parameter types
+    /// are exactly the columns'. Declared as <c>string[]</c> no constructor matched, so the first
+    /// file of a source whose header was not already on record was not compared at all: it failed
+    /// with "a parameterless default constructor ... is required", three times, and said nothing
+    /// about its header. Found on 2026-11-10 when a <c>.rar</c> was sent as a TAC file; every test
+    /// of this method had been a stub.
+    /// </remarks>
+    private sealed record CurrentSchemaRow(int id, string version, Array columns)
+    {
+        public string[] Columns => (string[])columns;
+    }
 }
