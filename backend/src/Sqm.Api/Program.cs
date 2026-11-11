@@ -173,6 +173,9 @@ builder.Services.AddSingleton<IDeviceImageCandidateStore, PostgresDeviceImageCan
 // note there about what that does and does not change.
 builder.Services.AddSingleton<IImportJobRepository, PostgresImportJobRepository>();
 builder.Services.AddSingleton<IImportFileStore, DirectoryImportFileStore>();
+
+// What an upload hands its bytes to: a CSV as it is, a GZ, ZIP or RAR unpacked first (ADR-025).
+builder.Services.AddSingleton<ImportArrivals>();
 builder.Services.AddSingleton<ITacVersionStore, ClickHouseTacVersionStore>();
 builder.Services.AddSingleton(TimeProvider.System);
 

@@ -3,6 +3,7 @@ using Sqm.Api.Auth;
 using Sqm.Api.Infrastructure;
 using Sqm.Application.DataImport;
 using Sqm.Application.Identity;
+using Sqm.Infrastructure.DataImport;
 using tusdotnet;
 
 namespace Sqm.Api.Endpoints;
@@ -35,13 +36,13 @@ public static class ResumableUploadEndpoints
 
     /// <summary>
     /// Takes the finished upload into the store and through the intake - answering exactly as the
-    /// single-request upload does: 201 with the queued job, or 409 with the import it duplicates.
+    /// single-request upload does: 201 with the queued job, 409 with the import it duplicates, 202
+    /// when it waits for its date, and for an archive 200 with what became of each file in it.
     /// </summary>
     private static async Task<IResult> CompleteAsync(
         string uploadId,
         ResumableUploads uploads,
-        IImportFileStore fileStore,
-        IImportJobRepository repository,
+        ImportArrivals arrivals,
         IAuditLog audit,
         HttpContext http,
         CancellationToken ct)
@@ -80,15 +81,29 @@ public static class ResumableUploadEndpoints
             return refusal;
         }
 
-        var stored = await fileStore
-            .AdoptAsync(source, fileName, uploads.DataPath(uploadId), ct).ConfigureAwait(false);
+        // A CSV is moved into the store - the pieces gathered on its volume for that. A gzip or an
+        // archive is unpacked from where it gathered, and what it held is what is stored.
+        ArrivalReport report;
+        try
+        {
+            report = await arrivals
+                .TakeFileAsync(
+                    source, fileName, uploads.DataPath(uploadId), adopt: true,
+                    ImportEndpoints.CurrentActor(http), http.TraceIdentifier, saidDate: null, ct)
+                .ConfigureAwait(false);
+        }
+        catch (FileRefusedException ex)
+        {
+            // Refused for what it is: sending the same bytes again would be refused again, so
+            // nothing of the upload is kept to be completed a second time.
+            await uploads.ForgetAsync(uploadId, CancellationToken.None).ConfigureAwait(false);
+            return ImportEndpoints.Refused(ex);
+        }
 
-        // Off the request's token from here on: the file has moved into the store, so a client that
-        // leaves now must not stop it short of a job.
+        // Off the request's token from here on: the file is in the store, so a client that leaves
+        // now must not stop the upload's own pieces from being cleared.
         await uploads.ForgetAsync(uploadId, CancellationToken.None).ConfigureAwait(false);
 
-        return await ImportEndpoints
-            .RespondToIntakeAsync(repository, fileStore, source, fileName, stored, http)
-            .ConfigureAwait(false);
+        return ImportEndpoints.RespondToArrival(report);
     }
 }

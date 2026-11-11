@@ -149,9 +149,16 @@ public sealed partial class PostgresImportJobRepository : IImportJobRepository
         string originalFileName,
         StoredFile stored,
         string uploadedBy,
+        string? archiveName,
+        FileDateDecision? fileDate,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(stored);
+
+        if (fileDate is { IsSettled: false })
+        {
+            throw new ArgumentException("only a settled date is recorded", nameof(fileDate));
+        }
 
         await using var connection = await OpenAsync(ct).ConfigureAwait(false);
 
@@ -160,8 +167,9 @@ public sealed partial class PostgresImportJobRepository : IImportJobRepository
         // unique index. The loser gets an empty result here and falls through to the lookup.
         const string InsertSql = """
             INSERT INTO imports.import_file
-                (source_code, original_file_name, stored_path, file_bytes, sha256, uploaded_by)
-            VALUES (@source, @name, @path, @bytes, @sha, @by)
+                (source_code, original_file_name, stored_path, file_bytes, sha256, uploaded_by,
+                 archive_name, declared_date, declared_date_source)
+            VALUES (@source, @name, @path, @bytes, @sha, @by, @archive, @date, @dateSource)
             ON CONFLICT (source_code, sha256) DO NOTHING
             RETURNING id
             """;
@@ -174,6 +182,9 @@ public sealed partial class PostgresImportJobRepository : IImportJobRepository
             bytes = stored.SizeBytes,
             sha = stored.Sha256,
             by = uploadedBy,
+            archive = archiveName,
+            date = fileDate?.Date,
+            dateSource = DateSourceText(fileDate?.Source),
         }, ct)).ConfigureAwait(false);
 
         if (inserted is { } newId)
@@ -188,7 +199,8 @@ public sealed partial class PostgresImportJobRepository : IImportJobRepository
                       FROM imports.import_job j
                      WHERE j.file_id = f.id
                      ORDER BY j.created_at DESC
-                     LIMIT 1)                                AS ExistingJobId
+                     LIMIT 1)                                AS ExistingJobId,
+                   f.declared_date                           AS DeclaredDate
               FROM imports.import_file f
              WHERE f.source_code = @source AND f.sha256 = @sha
             """;
@@ -201,10 +213,50 @@ public sealed partial class PostgresImportJobRepository : IImportJobRepository
 
         return new RegisteredFile(
             existing.FileId, stored.Sha256, IsNew: false,
-            existing.ExistingJobId, existing.OriginalName);
+            existing.ExistingJobId, existing.OriginalName, existing.DeclaredDate);
     }
 
-    private sealed record ExistingFileRow(long FileId, string OriginalName, long? ExistingJobId);
+    private sealed record ExistingFileRow(
+        long FileId, string OriginalName, long? ExistingJobId, DateOnly? DeclaredDate);
+
+    public async Task SetFileDateAsync(
+        long fileId, FileDateDecision fileDate, string? archiveName, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(fileDate);
+
+        if (fileDate is not { IsSettled: true, Date: not null, Source: not null })
+        {
+            throw new ArgumentException("only a settled date is recorded", nameof(fileDate));
+        }
+
+        // The archive is kept only where none is recorded: the file's first arrival is its history,
+        // and a second copy that came bare does not erase where the first came from.
+        const string Sql = """
+            UPDATE imports.import_file
+               SET declared_date        = @date,
+                   declared_date_source = @dateSource,
+                   archive_name         = COALESCE(archive_name, @archive)
+             WHERE id = @id
+            """;
+
+        await using var connection = await OpenAsync(ct).ConfigureAwait(false);
+        await connection.ExecuteAsync(Command(Sql, new
+        {
+            id = fileId,
+            date = fileDate.Date,
+            dateSource = DateSourceText(fileDate.Source),
+            archive = archiveName,
+        }, ct)).ConfigureAwait(false);
+    }
+
+    /// <summary>The source as the column's check constraint spells it.</summary>
+    private static string? DateSourceText(FileDateSource? source) => source switch
+    {
+        FileDateSource.Name => "name",
+        FileDateSource.Archive => "archive",
+        FileDateSource.Person => "person",
+        _ => null,
+    };
 
     public async Task<long> EnqueueAsync(
         string sourceCode,
@@ -379,7 +431,9 @@ public sealed partial class PostgresImportJobRepository : IImportJobRepository
                       j.attempt::int        AS Attempt,
                       j.max_attempts::int   AS MaxAttempts,
                       j.priority::int       AS Priority,
-                      j.reprocess_of_job_id AS ReprocessOfJobId
+                      j.reprocess_of_job_id AS ReprocessOfJobId,
+                      f.declared_date       AS DeclaredDate,
+                      f.archive_name        AS ArchiveName
             """;
 
         // Claims are taken one at a time across every worker. Without it, two workers claiming at

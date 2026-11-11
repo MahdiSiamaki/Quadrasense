@@ -11,12 +11,14 @@ namespace Sqm.Application.DataImport;
 /// When <paramref name="IsNew"/> is <see langword="false"/>, the most recent job for that file.
 /// </param>
 /// <param name="ExistingOriginalName">The name the earlier copy arrived under, which may differ.</param>
+/// <param name="ExistingDeclaredDate">The date the earlier copy was given, if it was given one.</param>
 public sealed record RegisteredFile(
     long FileId,
     string Sha256,
     bool IsNew,
     long? ExistingJobId,
-    string? ExistingOriginalName);
+    string? ExistingOriginalName,
+    DateOnly? ExistingDeclaredDate = null);
 
 /// <summary>A load recorded as a completed import.</summary>
 /// <param name="JobId">Its job.</param>
@@ -36,6 +38,12 @@ public sealed record RecordedLoad(long JobId, bool Created);
 /// <param name="MaxAttempts">How many attempts the job is allowed.</param>
 /// <param name="Priority">Higher runs first.</param>
 /// <param name="ReprocessOfJobId">Set when this job re-runs an earlier one.</param>
+/// <param name="DeclaredDate">
+/// The date the file was given when it arrived - by its name, its archive's name or a person. For
+/// a snapshot, whose job has no business date, this is where its dataset date is. Null for a file
+/// registered before the date was kept; its name is read then, as it always was.
+/// </param>
+/// <param name="ArchiveName">The archive the file was unpacked from, if it was.</param>
 public sealed record ClaimedJob(
     long JobId,
     string SourceCode,
@@ -48,7 +56,9 @@ public sealed record ClaimedJob(
     int Attempt,
     int MaxAttempts,
     int Priority,
-    long? ReprocessOfJobId);
+    long? ReprocessOfJobId,
+    DateOnly? DeclaredDate = null,
+    string? ArchiveName = null);
 
 /// <summary>Row counts a worker reports when a job finishes.</summary>
 /// <param name="RowsInput">Rows read from the file, excluding the header.</param>
@@ -201,6 +211,7 @@ public sealed record ImportJobSummary(
 /// <param name="SupersededByJobId">The later job that replaced this one, when there is one.</param>
 /// <param name="SupersedesJobId">The earlier job this one replaced.</param>
 /// <param name="ReprocessOfJobId">The job this one re-runs.</param>
+/// <param name="ArchiveName">The archive the file was unpacked from, if it was.</param>
 public sealed record ImportJobDetail(
     ImportJobSummary Summary,
     long FileId,
@@ -213,7 +224,8 @@ public sealed record ImportJobDetail(
     IReadOnlyList<QuarantineGroup> Quarantine,
     long? SupersededByJobId,
     long? SupersedesJobId,
-    long? ReprocessOfJobId);
+    long? ReprocessOfJobId,
+    string? ArchiveName = null);
 
 /// <summary>What became of a request to cancel a job.</summary>
 public enum CancelRequestResult
@@ -408,7 +420,10 @@ public sealed record WorkerHealth(
 /// <param name="Waiting">Later days of the same source queued behind it.</param>
 public sealed record QueueBlockage(string SourceCode, DateOnly BusinessDate, long JobId, string Status, int Waiting);
 
-/// <summary>A stored file with no job: its upload ended before it reached the queue.</summary>
+/// <summary>
+/// A stored file with no job: it waits for a person to give its date, or its upload ended before it
+/// reached the queue.
+/// </summary>
 /// <remarks>
 /// A day with no job blocks nothing and fails nothing, so without this list such a file says nothing
 /// at all. The file for 2026-10-26 sat like this for two days and was found by counting.
@@ -420,6 +435,8 @@ public sealed record QueueBlockage(string SourceCode, DateOnly BusinessDate, lon
 /// <param name="SizeBytes">Its size.</param>
 /// <param name="UploadedBy">Who sent it.</param>
 /// <param name="UploadedAt">When it was registered.</param>
+/// <param name="ArchiveName">The archive it was unpacked from, if it was.</param>
+/// <param name="DeclaredDate">Its date, when it has been given one; null while it waits for it.</param>
 public sealed record UnqueuedFile(
     long FileId,
     string SourceCode,
@@ -427,7 +444,14 @@ public sealed record UnqueuedFile(
     string StoredPath,
     long SizeBytes,
     string UploadedBy,
-    DateTimeOffset UploadedAt);
+    DateTimeOffset UploadedAt,
+    string? ArchiveName = null,
+    DateOnly? DeclaredDate = null);
+
+/// <summary>A stored file with no job, and what is known about its date.</summary>
+/// <param name="File">The file.</param>
+/// <param name="Date">Its date, or why it has none and what can be chosen.</param>
+public sealed record WaitingFile(UnqueuedFile File, FileDateDecision Date);
 
 /// <summary>A page of import history.</summary>
 /// <remarks>

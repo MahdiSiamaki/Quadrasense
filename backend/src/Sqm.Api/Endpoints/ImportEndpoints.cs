@@ -5,6 +5,7 @@ using Sqm.Application.DataImport;
 
 using Sqm.Api.Auth;
 using Sqm.Application.Identity;
+using Sqm.Infrastructure.DataImport;
 
 namespace Sqm.Api.Endpoints;
 
@@ -25,7 +26,7 @@ public static class ImportEndpoints
         // handler rather than declared here - see UploadAsync.
         group.MapPost("/{sourceCode}/upload", UploadAsync)
             .WithName("UploadImportFile")
-            .WithSummary("Uploads a file and queues it for import.")
+            .WithSummary("Uploads a CSV, or one packed as GZ, ZIP or RAR, and queues what it holds for import.")
             .DisableAntiforgery()
             .WithMetadata(new DisableRequestSizeLimitAttribute());
 
@@ -79,13 +80,13 @@ public static class ImportEndpoints
 
         group.MapGet("/unqueued-files", GetUnqueuedFilesAsync)
             .WithName("GetUnqueuedFiles")
-            .WithSummary("Stored files whose upload ended before they reached the queue.");
+            .WithSummary("Stored files with no import: waiting for their date, or left before the queue.");
 
         // The rest of an upload, so the upload's permission, which the source decides - as for
         // UploadAsync, it is checked inside the handler.
         group.MapPost("/{sourceCode}/unqueued-files/{fileId:long}/queue", QueueUnqueuedFileAsync)
             .WithName("QueueUnqueuedFile")
-            .WithSummary("Queues a stored file that has no import, from the copy already stored.");
+            .WithSummary("Queues a stored file that has no import, with the date a person gives it when its name does not say.");
 
         group.MapGet("/stage-durations", GetStageDurationsAsync)
             .WithName("GetImportStageDurations")
@@ -96,8 +97,7 @@ public static class ImportEndpoints
 
     private static async Task<IResult> UploadAsync(
         string sourceCode,
-        IImportFileStore fileStore,
-        IImportJobRepository repository,
+        ImportArrivals arrivals,
         IAuditLog audit,
         HttpContext http,
         CancellationToken ct)
@@ -123,71 +123,107 @@ public static class ImportEndpoints
                 statusCode: StatusCodes.Status415UnsupportedMediaType);
         }
 
-        // The bytes are streamed from the socket into the file store and hashed on the way past.
-        // Binding an IFormFile would have the framework buffer the whole body first, writing a
-        // gigabyte import to disk twice.
-        var received = await StreamedUpload.ReadFileSectionAsync(
-            http.Request,
-            async (fileName, body, token) =>
-            {
-                var stored = await fileStore
-                    .SaveAsync(source, fileName, body, token).ConfigureAwait(false);
-                return new ReceivedFile(fileName, stored);
-            },
-            ct).ConfigureAwait(false);
-
-        if (received is null)
+        // The bytes are streamed from the socket and hashed on the way past - into the file store
+        // for a CSV or a gzip, to a copy on the store's volume for an archive, which is unpacked from
+        // there. Binding an IFormFile would have the framework buffer the whole body first, writing
+        // a gigabyte import to disk twice. What is stored, the duplicate rule, the date and the
+        // queueing are ImportArrivals' and ImportIntake's: --import-file follows the same rules.
+        ArrivalReport? report;
+        try
         {
-            return Results.Problem(
-                title: "No file",
-                detail: "The request carried no file.",
-                statusCode: StatusCodes.Status400BadRequest);
+            report = await StreamedUpload.ReadFileSectionAsync(
+                http.Request,
+                (fileName, body, token) => arrivals.TakeAsync(
+                    source, fileName, body, CurrentActor(http), http.TraceIdentifier, saidDate: null, token),
+                ct).ConfigureAwait(false);
+        }
+        catch (FileRefusedException ex)
+        {
+            return Refused(ex);
         }
 
-        var (originalName, stored) = received;
-        return await RespondToIntakeAsync(repository, fileStore, source, originalName, stored, http)
-            .ConfigureAwait(false);
+        return report is null
+            ? Results.Problem(
+                title: "No file",
+                detail: "The request carried no file.",
+                statusCode: StatusCodes.Status400BadRequest)
+            : RespondToArrival(report);
+    }
+
+    /// <summary>A file that cannot be taken, with the reason its sender can act on.</summary>
+    internal static IResult Refused(FileRefusedException refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+
+        return Results.Problem(
+            title: "The file was not taken",
+            detail: refusal.Message,
+            statusCode: StatusCodes.Status400BadRequest);
     }
 
     /// <summary>
-    /// Registers a stored file and queues it, answering as every upload answers: 201 with the job,
-    /// or 409 with the import it duplicates. Shared with resumable uploads (ADR-018). Takes no
-    /// token: the file is stored, so it goes on to its job whatever becomes of the request.
+    /// Answers for something that arrived, as every upload answers. Shared with resumable uploads
+    /// (ADR-018).
     /// </summary>
-    internal static async Task<IResult> RespondToIntakeAsync(
-        IImportJobRepository repository,
-        IImportFileStore fileStore,
-        string source,
-        string originalName,
-        StoredFile stored,
-        HttpContext http)
+    /// <remarks>
+    /// One file - a CSV, or a gzip of one - answers as it always has: 201 with its job, or 409 with
+    /// the import it duplicates; and 202 when it is stored and waits for its date. An archive
+    /// answers 200 with what became of each file in it, because several things can be true at once.
+    /// </remarks>
+    internal static IResult RespondToArrival(ArrivalReport report)
     {
-        ArgumentNullException.ThrowIfNull(stored);
-        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(report);
 
-        // Registering, the duplicate rule and the queueing are ImportIntake's: --import-file
-        // follows the same rules for a file already on the server.
-        var intake = await ImportIntake
-            .AcceptAsync(repository, fileStore, source, originalName, stored, CurrentActor(http), http.TraceIdentifier)
-            .ConfigureAwait(false);
-        var registered = intake.File;
-
-        if (intake.QueuedJobId is not { } jobId)
+        if (report.IsArchive)
         {
+            return Results.Ok(new ArchiveUploadResponse(
+                report.FileName,
+                report.Kind.ToString().ToLowerInvariant(),
+                [.. report.Files.Select(ArchivedFileResponse.Of)],
+                [.. report.Skipped.Select(s => new SkippedEntryResponse(s.Name, s.Reason))]));
+        }
+
+        var file = report.Files[0];
+        var intake = file.Intake;
+
+        return intake.Outcome switch
+        {
+            IntakeOutcome.Queued => Results.Created(
+                $"/api/v1/imports/{intake.QueuedJobId}",
+                new UploadAcceptedResponse(
+                    intake.QueuedJobId!.Value, intake.File.FileId, file.FileName, file.Stored.SizeBytes,
+                    file.Stored.Sha256, DateText(intake.Date), DateSourceText(intake.Date))),
+
             // 409, not an error page. A duplicate upload is a normal thing for an operator to do
             // - the same file sent twice, or a retry after a lost connection - and the useful
             // response is "here is the import you already have", not "something went wrong".
-            return Results.Conflict(new DuplicateUploadResponse(
-                registered.FileId,
-                registered.ExistingJobId,
-                registered.ExistingOriginalName ?? originalName,
-                stored.Sha256,
-                "This file's content has already been uploaded for this source."));
-        }
+            IntakeOutcome.AlreadyImported => Results.Conflict(new DuplicateUploadResponse(
+                intake.File.FileId,
+                intake.File.ExistingJobId,
+                intake.File.ExistingOriginalName ?? file.FileName,
+                file.Stored.Sha256,
+                "This file's content has already been uploaded for this source.")),
 
-        return Results.Created($"/api/v1/imports/{jobId}", new UploadAcceptedResponse(
-            jobId, registered.FileId, originalName, stored.SizeBytes, stored.Sha256));
+            // 202: taken and kept, and not finished with. It is on the list the Import Center
+            // shows, where its date is given.
+            _ => Results.Accepted(
+                "/api/v1/imports/unqueued-files",
+                new UploadWaitingResponse(
+                    intake.File.FileId, file.FileName, file.Stored.SizeBytes, file.Stored.Sha256,
+                    DateStateText(intake.Date), [.. intake.Date.Candidates.Select(FileDate.Text)],
+                    intake.DateProblem ?? intake.Date.Explain(file.FileName))),
+        };
     }
+
+    internal static string? DateText(FileDateDecision date) =>
+        date is { IsSettled: true, Date: { } day } ? FileDate.Text(day) : null;
+
+    /// <summary>Who settled the date, as the API writes it: name, archive, person or recorded.</summary>
+    internal static string? DateSourceText(FileDateDecision date) =>
+        date.IsSettled ? date.Source?.ToString().ToLowerInvariant() ?? "recorded" : null;
+
+    /// <summary>settled, ambiguous, several, missing or future.</summary>
+    internal static string DateStateText(FileDateDecision date) => date.State.ToString().ToLowerInvariant();
 
     private static async Task<IResult> ListAsync(
         IImportJobRepository repository,
@@ -364,8 +400,12 @@ public static class ImportEndpoints
     private static async Task<IResult> GetBlockagesAsync(IImportJobRepository repository, CancellationToken ct) =>
         Results.Ok(await repository.GetBlockagesAsync(ct).ConfigureAwait(false));
 
-    private static async Task<IResult> GetUnqueuedFilesAsync(IImportJobRepository repository, CancellationToken ct) =>
-        Results.Ok(await repository.GetUnqueuedFilesAsync(ct).ConfigureAwait(false));
+    private static async Task<IResult> GetUnqueuedFilesAsync(
+        IImportJobRepository repository, TimeProvider clock, CancellationToken ct)
+    {
+        var waiting = await ImportIntake.ListWaitingAsync(repository, Today(clock), ct).ConfigureAwait(false);
+        return Results.Ok(waiting.Select(UnqueuedFileResponse.Of));
+    }
 
     private static async Task<IResult> QueueUnqueuedFileAsync(
         string sourceCode,
@@ -373,8 +413,10 @@ public static class ImportEndpoints
         IImportJobRepository repository,
         IImportFileStore fileStore,
         IAuditLog audit,
+        TimeProvider clock,
         HttpContext http,
-        CancellationToken ct)
+        CancellationToken ct,
+        [FromBody] QueueFileRequest? request = null)
     {
         ArgumentNullException.ThrowIfNull(http);
 
@@ -384,9 +426,24 @@ public static class ImportEndpoints
             return refusal;
         }
 
+        DateOnly? said = null;
+        if (!string.IsNullOrWhiteSpace(request?.Date))
+        {
+            if (ParseDate(request.Date) is not { } parsed)
+            {
+                return Results.Problem(
+                    title: "Not a date",
+                    detail: "Write the date as YYYY-MM-DD.",
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            said = parsed;
+        }
+
         var result = await ImportIntake
             .QueueStoredFileAsync(
-                repository, fileStore, sourceCode.ToUpperInvariant(), fileId, CurrentActor(http), http.TraceIdentifier, ct)
+                repository, fileStore, sourceCode.ToUpperInvariant(), fileId, said, CurrentActor(http),
+                http.TraceIdentifier, Today(clock), ct)
             .ConfigureAwait(false);
 
         return result.Outcome switch
@@ -396,9 +453,19 @@ public static class ImportEndpoints
                 title: "The stored file cannot be read",
                 detail: "It is not where it was recorded: the disk holding the files may be away, or the file was deleted.",
                 statusCode: StatusCodes.Status409Conflict),
+            ReprocessOutcome.DateNeeded => Results.Problem(
+                title: "This file needs its date",
+                detail: result.Problem,
+                statusCode: StatusCodes.Status400BadRequest),
+            ReprocessOutcome.DateRefused => Results.Problem(
+                title: "That date cannot be this file's",
+                detail: result.Problem,
+                statusCode: StatusCodes.Status400BadRequest),
             _ => Results.Created($"/api/v1/imports/{result.QueuedJobId}", new QueuedFileResponse(result.QueuedJobId!.Value, fileId)),
         };
     }
+
+    private static DateOnly Today(TimeProvider clock) => DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
 
     private static async Task<IResult> GetStageDurationsAsync(
         string source, IImportJobRepository repository, CancellationToken ct) =>
@@ -542,20 +609,41 @@ public static class ImportEndpoints
         UploadPreflightRequest request,
         HttpContext http,
         IAuditLog audit,
+        TimeProvider clock,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         var refusal = await RefuseUploadAsync(sourceCode, http, audit, ct).ConfigureAwait(false);
+        if (refusal is not null)
+        {
+            return refusal;
+        }
 
-        return refusal ?? Results.Ok(new UploadPreflightResponse(
+        // What the name says of the date, said before the bytes are sent: over the VPN a day is
+        // forty minutes of upload, and "you will be asked for its date" is better known at the
+        // start. An archive's own name settles nothing yet - what it holds is not known until it
+        // is here - so nothing is said of it.
+        var name = request.FileName ?? string.Empty;
+        var packed = name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".rar", StringComparison.OrdinalIgnoreCase);
+        var date = packed
+            ? null
+            : FileDate.Decide(
+                name.EndsWith(".gz", StringComparison.OrdinalIgnoreCase) ? name[..^3] : name,
+                null, onlyFileInArchive: false, Today(clock));
+
+        return Results.Ok(new UploadPreflightResponse(
             Source: sourceCode.ToUpperInvariant(),
-            FileName: request.FileName,
+            FileName: name,
             SizeBytes: request.SizeBytes,
-            Message: "Accepted. Content is checked for duplicates once the file arrives."));
+            Message: "Accepted. Content is checked for duplicates once the file arrives.",
+            DateState: date is null ? null : DateStateText(date),
+            Date: date is null ? null : DateText(date),
+            DateCandidates: date is null ? [] : [.. date.Candidates.Select(FileDate.Text)]));
     }
 
-    private static string CurrentActor(HttpContext http) =>
+    internal static string CurrentActor(HttpContext http) =>
         http.User.Identity?.Name is { Length: > 0 } name ? name : "anonymous@pre-auth";
 }
 
@@ -574,8 +662,20 @@ public sealed record UploadPreflightRequest(string FileName, long SizeBytes);
 /// <param name="FileName">The file the answer is about.</param>
 /// <param name="SizeBytes">Its size as the client reported it.</param>
 /// <param name="Message">What is still undecided, said plainly.</param>
+/// <param name="DateState">
+/// What the name says of the file's date: settled, ambiguous, several, missing or future. Null for
+/// an archive, whose files are not known until it arrives.
+/// </param>
+/// <param name="Date">The date, when the name settles it.</param>
+/// <param name="DateCandidates">What the name can mean, when it does not settle it.</param>
 public sealed record UploadPreflightResponse(
-    string Source, string FileName, long SizeBytes, string Message);
+    string Source,
+    string FileName,
+    long SizeBytes,
+    string Message,
+    string? DateState = null,
+    string? Date = null,
+    IReadOnlyList<string>? DateCandidates = null);
 
 /// <summary>The first rows of a stored file, as delivered.</summary>
 /// <param name="FileName">The name it arrived under.</param>
@@ -587,19 +687,114 @@ public sealed record FilePreview(
     string FileName, long FileBytes, IReadOnlyList<string> Columns,
     IReadOnlyList<string> Rows, long TotalRows);
 
-/// <summary>A file that arrived and was stored.</summary>
-/// <param name="OriginalName">The name the client sent.</param>
-/// <param name="Stored">Where it went, how big it was, and what it hashed to.</param>
-internal sealed record ReceivedFile(string OriginalName, StoredFile Stored);
-
 /// <summary>Returned when an upload is accepted and queued.</summary>
 /// <param name="JobId">The queued job.</param>
 /// <param name="FileId">The stored file.</param>
-/// <param name="FileName">The name it arrived under.</param>
-/// <param name="SizeBytes">Bytes written.</param>
-/// <param name="Sha256">Content hash.</param>
+/// <param name="FileName">The name it is stored under: a gzip's, without <c>.gz</c>.</param>
+/// <param name="SizeBytes">Bytes stored - for a gzip, what it unpacked to.</param>
+/// <param name="Sha256">Hash of what is stored.</param>
+/// <param name="Date">The date the file was given, YYYY-MM-DD.</param>
+/// <param name="DateFrom">Who gave it: name, archive, person or recorded.</param>
 public sealed record UploadAcceptedResponse(
-    long JobId, long FileId, string FileName, long SizeBytes, string Sha256);
+    long JobId, long FileId, string FileName, long SizeBytes, string Sha256,
+    string? Date = null, string? DateFrom = null);
+
+/// <summary>Returned when a file is stored and waits for a person to give its date.</summary>
+/// <param name="FileId">The stored file, to queue once its date is known.</param>
+/// <param name="FileName">The name it is stored under.</param>
+/// <param name="SizeBytes">Bytes stored.</param>
+/// <param name="Sha256">Hash of what is stored.</param>
+/// <param name="DateState">Why it waits: ambiguous, several, missing or future.</param>
+/// <param name="DateCandidates">What may be chosen; empty when any day that has happened may be given.</param>
+/// <param name="Message">The same, in words.</param>
+public sealed record UploadWaitingResponse(
+    long FileId, string FileName, long SizeBytes, string Sha256,
+    string DateState, IReadOnlyList<string> DateCandidates, string Message);
+
+/// <summary>Returned for an archive: what became of each file in it.</summary>
+/// <param name="Archive">The name the archive arrived under.</param>
+/// <param name="Kind">zip or rar, told from its first bytes.</param>
+/// <param name="Files">The CSV files taken from it.</param>
+/// <param name="Skipped">What it held besides, and why each was left.</param>
+public sealed record ArchiveUploadResponse(
+    string Archive, string Kind, IReadOnlyList<ArchivedFileResponse> Files, IReadOnlyList<SkippedEntryResponse> Skipped);
+
+/// <summary>One file taken from an archive.</summary>
+/// <param name="FileName">Its own name.</param>
+/// <param name="FileId">The stored file.</param>
+/// <param name="SizeBytes">Bytes stored.</param>
+/// <param name="Sha256">Hash of what is stored.</param>
+/// <param name="Outcome">queued, duplicate or waiting.</param>
+/// <param name="JobId">Its job, when queued.</param>
+/// <param name="ExistingJobId">The import its content already had, when a duplicate.</param>
+/// <param name="Date">Its date, when settled.</param>
+/// <param name="DateFrom">Who settled it: name, archive, person or recorded.</param>
+/// <param name="DateState">settled, or why it waits: ambiguous, several, missing or future.</param>
+/// <param name="DateCandidates">What may be chosen when it waits.</param>
+/// <param name="Message">What happened, in words.</param>
+public sealed record ArchivedFileResponse(
+    string FileName, long FileId, long SizeBytes, string Sha256, string Outcome, long? JobId, long? ExistingJobId,
+    string? Date, string? DateFrom, string DateState, IReadOnlyList<string> DateCandidates, string Message)
+{
+    internal static ArchivedFileResponse Of(ArrivedOutcome file)
+    {
+        var intake = file.Intake;
+        var date = ImportEndpoints.DateText(intake.Date);
+
+        var (outcome, message) = intake.Outcome switch
+        {
+            IntakeOutcome.Queued => ("queued", $"Queued as import {intake.QueuedJobId}, dated {date}."),
+            IntakeOutcome.AlreadyImported => (
+                "duplicate",
+                intake.File.ExistingJobId is { } existing
+                    ? $"Already imported: see import {existing}."
+                    : "This exact file has already been uploaded."),
+            _ => ("waiting", intake.DateProblem ?? intake.Date.Explain(file.FileName)),
+        };
+
+        return new ArchivedFileResponse(
+            file.FileName, intake.File.FileId, file.Stored.SizeBytes, file.Stored.Sha256, outcome,
+            intake.QueuedJobId, intake.File.ExistingJobId, date, ImportEndpoints.DateSourceText(intake.Date),
+            ImportEndpoints.DateStateText(intake.Date), [.. intake.Date.Candidates.Select(FileDate.Text)], message);
+    }
+}
+
+/// <summary>Something an archive held that was not taken.</summary>
+/// <param name="Name">Its path inside the archive.</param>
+/// <param name="Reason">Why it was left.</param>
+public sealed record SkippedEntryResponse(string Name, string Reason);
+
+/// <summary>A stored file with no import, as the Import Center lists it.</summary>
+/// <param name="FileId">The file.</param>
+/// <param name="SourceCode">Its source.</param>
+/// <param name="OriginalFileName">The name it is stored under.</param>
+/// <param name="ArchiveName">The archive it was unpacked from, if it was.</param>
+/// <param name="SizeBytes">Its size.</param>
+/// <param name="UploadedBy">Who sent it.</param>
+/// <param name="UploadedAt">When it was registered.</param>
+/// <param name="DateState">settled: it only needs queueing. Otherwise why it waits.</param>
+/// <param name="Date">Its date, when settled.</param>
+/// <param name="DateCandidates">What may be chosen; empty when any day that has happened may be given.</param>
+/// <param name="Message">The same, in words.</param>
+public sealed record UnqueuedFileResponse(
+    long FileId, string SourceCode, string OriginalFileName, string? ArchiveName, long SizeBytes,
+    string UploadedBy, DateTimeOffset UploadedAt, string DateState, string? Date,
+    IReadOnlyList<string> DateCandidates, string Message)
+{
+    internal static UnqueuedFileResponse Of(WaitingFile waiting)
+    {
+        var (file, date) = (waiting.File, waiting.Date);
+
+        return new UnqueuedFileResponse(
+            file.FileId, file.SourceCode, file.OriginalFileName, file.ArchiveName, file.SizeBytes, file.UploadedBy,
+            file.UploadedAt, ImportEndpoints.DateStateText(date), ImportEndpoints.DateText(date),
+            [.. date.Candidates.Select(FileDate.Text)], date.Explain(file.OriginalFileName));
+    }
+}
+
+/// <summary>What a person says when queueing a stored file.</summary>
+/// <param name="Date">Its date, YYYY-MM-DD, where its name does not settle one.</param>
+public sealed record QueueFileRequest(string? Date);
 
 /// <summary>Returned when the uploaded content was already known.</summary>
 /// <param name="FileId">The file already on record.</param>

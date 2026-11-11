@@ -72,6 +72,8 @@ public sealed class OrphanedUploadTests : IClassFixture<WebApplicationFactory<Pr
                     "RegisterFileAsync" => Noting(method.Name, args, Task.FromResult(
                         new RegisteredFile(41, "abc", IsNew: false, _existingJob, "daily.csv"))),
                     "EnqueueAsync" => Queued(args),
+                    "SetFileDateAsync" => Noting(method.Name, args, Task.CompletedTask),
+                    "AppendEventAsync" => Noting(method.Name, args, Task.CompletedTask),
                     "WriteAuditAsync" => Noting(method.Name, args, Task.CompletedTask),
                     "GetUnqueuedFilesAsync" => Task.FromResult(_unqueued),
                     "GetWorkerHealthAsync" => Task.FromResult(new WorkerHealth(2, 0, 0, 0, null, 1, 0)),
@@ -122,7 +124,7 @@ public sealed class OrphanedUploadTests : IClassFixture<WebApplicationFactory<Pr
 
         // Every step from registering to the audit, the duplicate's delete included.
         Assert.Equal(
-            ["RegisterFileAsync", "DeleteAsync", "EnqueueAsync", "WriteAuditAsync"],
+            ["RegisterFileAsync", "DeleteAsync", "SetFileDateAsync", "EnqueueAsync", "AppendEventAsync", "WriteAuditAsync"],
             _tokens.Select(t => t.Method));
         Assert.All(_tokens, t => Assert.False(t.Token.CanBeCanceled, t.Method));
     }

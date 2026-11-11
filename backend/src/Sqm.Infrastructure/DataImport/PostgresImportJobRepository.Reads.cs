@@ -191,7 +191,8 @@ public sealed partial class PostgresImportJobRepository
                    j.reprocess_of_job_id AS ReprocessOfJobId,
                    (SELECT s.id FROM imports.import_job s
                      WHERE s.supersedes_job_id = j.id
-                     ORDER BY s.created_at DESC LIMIT 1) AS SupersededByJobId
+                     ORDER BY s.created_at DESC LIMIT 1) AS SupersededByJobId,
+                   f.archive_name        AS ArchiveName
               FROM imports.import_job j
               JOIN imports.import_file f ON f.id = j.file_id
               LEFT JOIN imports.schema_version sv ON sv.id = j.schema_version_id
@@ -253,7 +254,8 @@ public sealed partial class PostgresImportJobRepository
             [.. quarantine],
             row.SupersededByJobId,
             row.SupersedesJobId,
-            row.ReprocessOfJobId);
+            row.ReprocessOfJobId,
+            row.ArchiveName);
     }
 
     private sealed record JobDetailRow(
@@ -264,7 +266,7 @@ public sealed partial class PostgresImportJobRepository
         long? DurationMs, string CreatedBy, string? ErrorSummary,
         bool Cancellable, bool CancelRequested, string? CurrentStage, DateTimeOffset? StageStartedAt,
         long FileId, string Sha256, string StoredPath, bool IsBlobPresent, string? SchemaVersion,
-        long? SupersedesJobId, long? ReprocessOfJobId, long? SupersededByJobId)
+        long? SupersedesJobId, long? ReprocessOfJobId, long? SupersededByJobId, string? ArchiveName)
     {
         public ImportJobSummary ToSummary() => new(
             JobId, SourceCode, OriginalFileName, FileBytes,
@@ -495,10 +497,14 @@ public sealed partial class PostgresImportJobRepository
                    f.stored_path        AS StoredPath,
                    f.file_bytes         AS SizeBytes,
                    f.uploaded_by        AS UploadedBy,
-                   f.uploaded_at        AS UploadedAt
+                   f.uploaded_at        AS UploadedAt,
+                   f.archive_name       AS ArchiveName,
+                   f.declared_date      AS DeclaredDate
               FROM imports.import_file f
              WHERE f.is_blob_present
-               AND f.uploaded_at < now() - interval '2 minutes'
+               -- With no date the file is waiting for one, and nothing is about to queue it. With
+               -- one, it may be in the moment between being registered and being queued.
+               AND (f.declared_date IS NULL OR f.uploaded_at < now() - interval '2 minutes')
                AND NOT EXISTS (SELECT 1 FROM imports.import_job j WHERE j.file_id = f.id)
              ORDER BY f.uploaded_at
             """;

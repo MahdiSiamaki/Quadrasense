@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Sqm.Application.DataImport;
 using Sqm.Infrastructure.DataImport;
@@ -51,9 +50,6 @@ internal sealed partial class TacSnapshotProcessor(
     private const int UnusualDiffThreshold = 10_000;
 
     public string SourceCode => "TAC";
-
-    [GeneratedRegex(@"(\d{1,2})([A-Za-z]{3})(\d{4})", RegexOptions.None, matchTimeoutMilliseconds: 200)]
-    private static partial Regex DatasetDatePattern { get; }
 
     public async Task<ImportOutcome> ProcessAsync(
         ClaimedJob job, IImportContext context, CancellationToken ct)
@@ -208,11 +204,15 @@ internal sealed partial class TacSnapshotProcessor(
             return Cancelled(versionId);
         }
 
+        var datasetDate = DatasetDateOf(job);
+
         await repository.CreateTacVersionAsync(
             job.JobId,
             versionId,
-            LabelFor(job.OriginalFileName, versionId),
-            ParseDatasetDate(job.OriginalFileName),
+            datasetDate is { } dated
+                ? string.Create(CultureInfo.InvariantCulture, $"v{dated:yyyy.MM.dd}")
+                : string.Create(CultureInfo.InvariantCulture, $"v{versionId}"),
+            datasetDate,
             (int)rows,
             activeVersionId,
             diff,
@@ -371,30 +371,15 @@ internal sealed partial class TacSnapshotProcessor(
         return groups;
     }
 
-    /// <summary>Reads the dataset date out of a name like <c>DeviceDatabase_TAC1Sep2026.csv</c>.</summary>
-    private static DateOnly? ParseDatasetDate(string fileName)
-    {
-        var match = DatasetDatePattern.Match(fileName);
-        if (!match.Success)
-        {
-            return null;
-        }
-
-        var text = $"{match.Groups[1].Value}-{match.Groups[2].Value}-{match.Groups[3].Value}";
-
-        return DateOnly.TryParseExact(
-            text, "d-MMM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
-            ? date
-            : null;
-    }
-
-    private static string LabelFor(string fileName, int versionId)
-    {
-        var date = ParseDatasetDate(fileName);
-        return date is { } d
-            ? $"v{d:yyyy.MM.dd}"
-            : $"v{versionId}";
-    }
+    /// <summary>The dataset's own date: what it is labelled by, and what its age is measured from.</summary>
+    /// <remarks>
+    /// Decided when the file arrived and kept on it - from its name, from the name of the archive
+    /// GSMA delivers it in, or from a person (<see cref="FileDate"/>). A snapshot's job carries no
+    /// business date, so the file is the only place it is. A file registered before the date was
+    /// kept has only its name, read by the same rule: <c>DeviceDatabase_TAC1Sep2026.csv</c>.
+    /// </remarks>
+    private static DateOnly? DatasetDateOf(ClaimedJob job) =>
+        job.DeclaredDate ?? FileNameDate.ExactOf(job.OriginalFileName);
 
     private static void ReportBytes(
         IImportContext context, long bytesRead, long total, CancellationToken ct)
