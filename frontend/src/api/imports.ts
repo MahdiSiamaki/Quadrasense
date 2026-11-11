@@ -172,6 +172,8 @@ export interface ImportJobDetail {
   supersededByJobId: number | null
   supersedesJobId: number | null
   reprocessOfJobId: number | null
+  /** The archive the file was unpacked from, if it arrived in one. The archive itself is not kept. */
+  archiveName: string | null
 }
 
 export interface ImportPage {
@@ -228,14 +230,35 @@ export interface QueueBlockage {
   waiting: number
 }
 
-/** A stored file with no job: its upload ended before it reached the queue. */
+/**
+ * What is known of a file's date. `settled`: one date, known. Otherwise why a person is asked:
+ * the name can be read two ways, holds several dates, holds none, or names a day not yet come.
+ */
+export type DateState = 'settled' | 'ambiguous' | 'several' | 'missing' | 'future'
+
+/** Who settled a file's date: its own name, its archive's, a person, or the record of an earlier arrival. */
+export type DateFrom = 'name' | 'archive' | 'person' | 'recorded'
+
+/**
+ * A stored file with no job. Either it waits for a person to give its date - its name does not
+ * settle one - or its upload ended before it reached the queue and it only needs queueing.
+ */
 export interface UnqueuedFile {
   fileId: number
   sourceCode: string
   originalFileName: string
+  /** The archive it was unpacked from, if it was. */
+  archiveName: string | null
   sizeBytes: number
   uploadedBy: string
   uploadedAt: string
+  dateState: DateState
+  /** Its date, YYYY-MM-DD, when settled. */
+  date: string | null
+  /** What may be chosen. Empty when any day that has happened may be given. */
+  dateCandidates: string[]
+  /** The same, in words. */
+  message: string
 }
 
 export interface ImportHistoryQuery {
@@ -275,10 +298,11 @@ export const importsApi = {
   unqueuedFiles: (signal?: AbortSignal) =>
     api.get<UnqueuedFile[]>('/api/v1/imports/unqueued-files', undefined, signal),
 
-  queueFile: (file: Pick<UnqueuedFile, 'sourceCode' | 'fileId'>) =>
+  /** Queues a stored file. `date` (YYYY-MM-DD) is the person's answer, where the name does not settle one. */
+  queueFile: (file: Pick<UnqueuedFile, 'sourceCode' | 'fileId'>, date?: string) =>
     api.post<{ jobId: number; fileId: number }>(
       `/api/v1/imports/${file.sourceCode}/unqueued-files/${file.fileId}/queue`,
-      {},
+      date ? { date } : {},
     ),
 
   stageDurations: (source: string, signal?: AbortSignal) =>
@@ -293,9 +317,46 @@ export const importsApi = {
     ),
 }
 
-/** What an upload reports back, either way. */
+/** One file taken from an archive, and what became of it. */
+export interface ArchivedFile {
+  fileName: string
+  fileId: number
+  sizeBytes: number
+  sha256: string
+  outcome: 'queued' | 'duplicate' | 'waiting'
+  jobId: number | null
+  existingJobId: number | null
+  date: string | null
+  dateFrom: DateFrom | null
+  dateState: DateState
+  dateCandidates: string[]
+  message: string
+}
+
+/** Something an archive held that was not taken, and why. */
+export interface SkippedEntry {
+  name: string
+  reason: string
+}
+
+/**
+ * What an upload reports back.
+ *
+ * One file - a CSV, or a gzip of one - is queued, turns out to be imported already, or is stored
+ * and waits for its date. An archive answers for each file in it, because several of those can be
+ * true at once.
+ */
 export type UploadResult =
-  | { kind: 'queued'; jobId: number; fileName: string; sizeBytes: number; sha256: string }
+  | {
+      kind: 'queued'
+      jobId: number
+      /** The name it is stored under: a gzip's, without `.gz`. */
+      fileName: string
+      sizeBytes: number
+      sha256: string
+      date?: string | null
+      dateFrom?: DateFrom | null
+    }
   | {
       kind: 'duplicate'
       fileId: number
@@ -303,6 +364,23 @@ export type UploadResult =
       originalFileName: string
       sha256: string
       message: string
+    }
+  | {
+      kind: 'needsDate'
+      fileId: number
+      fileName: string
+      sizeBytes: number
+      sha256: string
+      dateState: DateState
+      dateCandidates: string[]
+      message: string
+    }
+  | {
+      kind: 'archive'
+      archive: string
+      archiveKind: 'zip' | 'rar'
+      files: ArchivedFile[]
+      skipped: SkippedEntry[]
     }
 
 /**
@@ -317,6 +395,13 @@ export interface UploadPreflight {
   sizeBytes: number
   /** What is still undecided: the duplicate check needs the content and happens on arrival. */
   message: string
+  /**
+   * What the name says of the file's date, read before a byte is sent. Null for an archive: what
+   * it holds, and so whether its own name dates anything, is not known until it arrives.
+   */
+  dateState: DateState | null
+  date: string | null
+  dateCandidates: string[]
 }
 
 /**
@@ -343,7 +428,8 @@ function worthRetrying(error: DetailedError): boolean {
  * where each upload lives, in this browser, keyed by the file's name, size and date.
  *
  * Once every byte is in, the server is asked to complete it, which is where it becomes an import -
- * or turns out to be one already - exactly as a single upload did.
+ * or turns out to be one already, or to need its date; an archive is unpacked there, and answers for
+ * each file it held.
  *
  * Cancelling terminates the upload on the server, so nothing of it is kept.
  */
@@ -353,6 +439,7 @@ export async function uploadImportFile(
   onProgress: (fraction: number) => void,
   signal?: AbortSignal,
   onRetry?: (attempt: number) => void,
+  onPreflight?: (preflight: UploadPreflight) => void,
 ): Promise<UploadResult> {
   // Ask before sending. This is a ~200-byte JSON POST that gets the same answer the upload would
   // give for everything decidable without the body - is the session alive, is the source real,
@@ -364,11 +451,13 @@ export async function uploadImportFile(
   //
   // Not a security boundary. The upload re-checks everything; skipping this would waste an
   // upload, not gain one.
-  await api.post<UploadPreflight>(
+  const preflight = await api.post<UploadPreflight>(
     `/api/v1/imports/${sourceCode}/upload/preflight`,
     { fileName: file.name, sizeBytes: file.size },
     signal,
   )
+  // It also says what the name tells of the date - worth knowing before forty minutes of upload.
+  onPreflight?.(preflight)
 
   // Loaded here, not with the page: it is 15.5 KB gzipped, and every page carried it once the
   // upload queue moved into the header (measured 2026-10-27: 30.3 -> 45.8 KB for the entry chunk).
@@ -424,15 +513,15 @@ export async function uploadImportFile(
     })
   })
 
-  // Every byte is in: now it becomes an import, or turns out to be one already.
+  // Every byte is in: now it becomes an import, or turns out to be one already, or to need its date.
   const id = uploadUrl.slice(uploadUrl.lastIndexOf('/') + 1)
   try {
-    const queued = await api.post<{ jobId: number; fileName: string; sizeBytes: number; sha256: string }>(
+    const answer = await api.post<Record<string, unknown>>(
       `/api/v1/imports/uploads/${id}/complete`,
       {},
       signal,
     )
-    return { kind: 'queued', ...queued }
+    return completed(answer)
   } catch (error) {
     // A duplicate is a normal outcome, not a failure: the same file sent twice, or a retry after
     // a dropped connection. It resolves with an explanation rather than rejecting.
@@ -448,5 +537,45 @@ export async function uploadImportFile(
       }
     }
     throw error
+  }
+}
+
+/**
+ * Reads what completing an upload answered. Told from what the answer holds, not from its status:
+ * an archive lists its files (200), a queued file names its job (201), and a file with neither is
+ * stored and waits for its date (202).
+ */
+function completed(answer: Record<string, unknown>): UploadResult {
+  if (Array.isArray(answer['files'])) {
+    return {
+      kind: 'archive',
+      archive: answer['archive'] as string,
+      archiveKind: answer['kind'] as 'zip' | 'rar',
+      files: answer['files'] as ArchivedFile[],
+      skipped: (answer['skipped'] as SkippedEntry[] | undefined) ?? [],
+    }
+  }
+
+  if (typeof answer['jobId'] === 'number') {
+    return {
+      kind: 'queued',
+      jobId: answer['jobId'],
+      fileName: answer['fileName'] as string,
+      sizeBytes: answer['sizeBytes'] as number,
+      sha256: answer['sha256'] as string,
+      date: (answer['date'] as string | null | undefined) ?? null,
+      dateFrom: (answer['dateFrom'] as DateFrom | null | undefined) ?? null,
+    }
+  }
+
+  return {
+    kind: 'needsDate',
+    fileId: answer['fileId'] as number,
+    fileName: answer['fileName'] as string,
+    sizeBytes: answer['sizeBytes'] as number,
+    sha256: answer['sha256'] as string,
+    dateState: answer['dateState'] as DateState,
+    dateCandidates: (answer['dateCandidates'] as string[] | undefined) ?? [],
+    message: answer['message'] as string,
   }
 }

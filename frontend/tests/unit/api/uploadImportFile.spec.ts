@@ -60,7 +60,27 @@ const { ApiError } = await import('@/api/client')
 const { DetailedError } = await import('tus-js-client')
 
 const file = () => new File(['abc'], 'daily_subs_device_sim_info_2026-02-10.csv')
-const preflight = { source: 'SQM', fileName: 'x', sizeBytes: 3, message: '' }
+const preflight = {
+  source: 'SQM',
+  fileName: 'x',
+  sizeBytes: 3,
+  message: '',
+  dateState: 'settled',
+  date: '2026-02-10',
+  dateCandidates: [],
+}
+
+/** Sends a file all the way, and returns what the upload reported for the given answer to "complete". */
+async function completedWith(answer: unknown) {
+  state.post.mockResolvedValueOnce(preflight).mockResolvedValueOnce(answer)
+
+  const outcome = uploadImportFile('SQM', file(), () => {})
+  const upload = await started()
+  upload.url = '/api/v1/imports/uploads/0123456789abcdef0123456789abcdef'
+  upload.options['onSuccess']()
+
+  return outcome
+}
 
 /** The upload tus was asked to make, once it has started. */
 async function started() {
@@ -111,6 +131,76 @@ describe('a resumable upload', () => {
       {},
       undefined,
     )
+  })
+
+  it('says what the name tells of the date before a byte is sent', async () => {
+    const undated = { ...preflight, dateState: 'missing', date: null }
+    state.post.mockResolvedValueOnce(undated)
+    const said: unknown[] = []
+
+    void uploadImportFile('SQM', file(), () => {}, undefined, undefined, (p) => said.push(p))
+    await started()
+
+    expect(said).toEqual([undated])
+  })
+
+  it('reports the date a queued file was given, and who gave it', async () => {
+    await expect(
+      completedWith({ jobId: 77, fileId: 41, fileName: 'a.csv', sizeBytes: 3, sha256: 'abc', date: '2026-02-10', dateFrom: 'name' }),
+    ).resolves.toEqual({
+      kind: 'queued',
+      jobId: 77,
+      fileName: 'a.csv',
+      sizeBytes: 3,
+      sha256: 'abc',
+      date: '2026-02-10',
+      dateFrom: 'name',
+    })
+  })
+
+  it('reports a file that is stored and waits for its date as that, not as queued', async () => {
+    // 202: it has no job. What tells it apart is that the answer names none.
+    const answer = {
+      fileId: 41,
+      fileName: 'subs_03-04-2026.csv',
+      sizeBytes: 3,
+      sha256: 'abc',
+      dateState: 'ambiguous',
+      dateCandidates: ['2026-03-04', '2026-04-03'],
+      message: 'The date in subs_03-04-2026.csv can be read two ways.',
+    }
+
+    await expect(completedWith(answer)).resolves.toEqual({ kind: 'needsDate', ...answer })
+  })
+
+  it('reports an archive by what became of each file in it', async () => {
+    const files = [
+      {
+        fileName: 'DeviceDatabase.csv',
+        fileId: 41,
+        sizeBytes: 2188,
+        sha256: 'abc',
+        outcome: 'queued',
+        jobId: 77,
+        existingJobId: null,
+        date: '2026-11-09',
+        dateFrom: 'archive',
+        dateState: 'settled',
+        dateCandidates: ['2026-11-09'],
+        message: 'Queued as import 77, dated 2026-11-09.',
+      },
+    ]
+    const skipped = [{ name: 'readme.txt', reason: 'Not a .csv file.' }]
+
+    await expect(
+      completedWith({ archive: 'DeviceDatabaseTAC09Nov2026.rar', kind: 'rar', files, skipped }),
+    ).resolves.toEqual({
+      kind: 'archive',
+      archive: 'DeviceDatabaseTAC09Nov2026.rar',
+      archiveKind: 'rar',
+      files,
+      skipped,
+    })
   })
 
   it('reports a file already imported as a duplicate, not a failure', async () => {

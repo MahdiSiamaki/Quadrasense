@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import Button from '@/design-system/Button.vue'
 import Card from '@/design-system/Card.vue'
 import AsyncBoundary from '@/design-system/AsyncBoundary.vue'
@@ -51,20 +51,60 @@ const freshness = useFreshness()
 const unqueued = useUnqueuedFiles()
 const { queueFile } = useImportActions()
 
+/**
+ * A stored file with no import is one of two things, and they are told apart by its date.
+ *
+ * With a date, its upload ended before it reached the queue: it only needs queueing. Without one,
+ * nothing went wrong - its name does not say which day it is, or says two, and a daily file filed
+ * under the wrong day is believed by everything after it. So it waits, and is asked about here.
+ */
+const waitingForDate = computed(() => (unqueued.data.value ?? []).filter((f) => f.dateState !== 'settled'))
+const leftBehind = computed(() => (unqueued.data.value ?? []).filter((f) => f.dateState === 'settled'))
+
+/** The date typed for a file whose name offers nothing to choose from, by file. */
+const typedDate = reactive<Record<number, string>>({})
+
+/**
+ * The last day a file may be given: tomorrow, counted in UTC as the server counts it - the files
+ * are named in Tehran, where the day turns three and a half hours earlier.
+ */
+const latestDate = computed(() => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10))
+
+/** What is being asked, in the terms of the file's source. */
+function question(file: UnqueuedFile): string {
+  const what = file.sourceCode === 'TAC' ? "the dataset's own date" : 'the day it describes'
+  switch (file.dateState) {
+    case 'ambiguous':
+      return `The date in its name can be read two ways. Which is ${what}?`
+    case 'several':
+      return `Its name holds more than one date. Which is ${what}?`
+    case 'future':
+      return `The date in its name has not happened yet, so it was not taken. What is ${what}?`
+    default:
+      return `Its name has no date. What is ${what}?`
+  }
+}
+
 /** Why the last file could not be queued: refused, or no longer readable. */
 const queueProblem = ref<string | null>(null)
 
-function queueStored(file: UnqueuedFile) {
+function queueStored(file: UnqueuedFile, date?: string) {
   queueProblem.value = null
-  queueFile.mutate(file, {
-    onError: (error) => {
-      queueProblem.value =
-        error instanceof ApiError && error.problem?.detail
-          ? error.problem.detail
-          : `${file.originalFileName} could not be queued.`
+  queueFile.mutate(
+    { file, date },
+    {
+      onError: (error) => {
+        queueProblem.value =
+          error instanceof ApiError && error.problem?.detail
+            ? error.problem.detail
+            : `${file.originalFileName} could not be queued.`
+      },
     },
-  })
+  )
 }
+
+const queueing = (file: UnqueuedFile) =>
+  queueFile.isPending.value && queueFile.variables.value?.file.fileId === file.fileId
 
 /** Status groupings an operator actually filters by, not the seventeen raw statuses. */
 const STATUS_PRESETS = [
@@ -83,6 +123,11 @@ const STATUS_PRESETS = [
 
 function resetPaging() {
   page.value = 1
+}
+
+function refreshAfterUpload() {
+  void history.refetch()
+  void unqueued.refetch()
 }
 </script>
 
@@ -204,17 +249,98 @@ function resetPaging() {
     </div>
 
     <!--
+      A file whose name does not say its date (ADR-025). Nothing failed: it is stored, and it waits
+      because a date is never guessed. Where the name can mean two dates they are the two buttons;
+      where it offers none, the date is typed. The server holds the answer to the same rule, so a
+      date the name cannot mean is refused there and said here.
+    -->
+    <div
+      v-if="waitingForDate.length"
+      id="files-waiting-for-a-date"
+      class="scroll-mt-20 rounded-[var(--radius-md)] border border-[var(--c-warning)] p-4"
+      role="alert"
+    >
+      <p class="text-sm font-semibold">
+        {{ waitingForDate.length }} uploaded file{{ waitingForDate.length === 1 ? ' waits' : 's wait' }} for
+        {{ waitingForDate.length === 1 ? 'its date' : 'their dates' }}.
+      </p>
+      <p class="mt-1 text-sm text-[var(--c-text-secondary)]">
+        A file's date is read from its name. Where the name gives none, or can be read two ways, the file
+        is stored and nothing is guessed. Say which date is its own, and it is imported from the stored
+        copy: nothing has to be uploaded again.
+      </p>
+      <ul class="mt-2 divide-y">
+        <li
+          v-for="file in waitingForDate"
+          :key="file.fileId"
+          class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2"
+        >
+          <div class="min-w-0">
+            <p class="text-sm wrap-anywhere">
+              {{ file.originalFileName }}
+              <span v-if="file.archiveName" class="text-[var(--c-text-muted)]">· from {{ file.archiveName }}</span>
+            </p>
+            <p class="text-xs text-[var(--c-text-muted)]">
+              {{ file.sourceCode }} · {{ formatBytes(file.sizeBytes) }} · uploaded by {{ file.uploadedBy }},
+              <span :title="formatDateTime(file.uploadedAt)">{{ formatRelative(file.uploadedAt) }}</span>
+            </p>
+            <p class="mt-0.5 text-xs text-[var(--c-text-secondary)]">{{ question(file) }}</p>
+          </div>
+
+          <!-- What the name can mean: one press answers. -->
+          <div v-if="file.dateCandidates.length" class="flex flex-wrap items-center gap-2">
+            <Button
+              v-for="candidate in file.dateCandidates"
+              :key="candidate"
+              size="sm"
+              :pending="queueing(file) && queueFile.variables.value?.date === candidate"
+              :disabled="queueFile.isPending.value"
+              @click="queueStored(file, candidate)"
+            >
+              {{ formatDate(candidate) }}
+            </Button>
+          </div>
+
+          <!-- The name offers nothing: any day that has happened. -->
+          <form
+            v-else
+            class="flex items-center gap-2"
+            @submit.prevent="typedDate[file.fileId] && queueStored(file, typedDate[file.fileId])"
+          >
+            <input
+              v-model="typedDate[file.fileId]"
+              type="date"
+              required
+              :max="latestDate"
+              :aria-label="`The date of ${file.originalFileName}`"
+              class="rounded-[var(--radius-md)] border bg-[var(--c-surface)] px-2 py-1 text-xs"
+            />
+            <Button
+              size="sm"
+              type="submit"
+              :pending="queueing(file)"
+              :disabled="queueFile.isPending.value || !typedDate[file.fileId]"
+            >
+              Queue import
+            </Button>
+          </form>
+        </li>
+      </ul>
+      <p v-if="queueProblem" class="mt-2 text-sm text-[var(--c-danger-text)]" role="status">{{ queueProblem }}</p>
+    </div>
+
+    <!--
       The quietest of them. A file stored with no job blocks nothing and fails nothing, so its day
       simply never arrives: the file for 2026-10-26 sat like that for two days and was found by
       counting. Queued from the copy already stored, so nothing has to be sent again.
     -->
     <div
-      v-if="unqueued.data.value?.length"
+      v-if="leftBehind.length"
       class="rounded-[var(--radius-md)] border border-[var(--c-warning)] p-4"
       role="alert"
     >
       <p class="text-sm font-semibold">
-        {{ unqueued.data.value.length }} uploaded file{{ unqueued.data.value.length === 1 ? ' has' : 's have' }}
+        {{ leftBehind.length }} uploaded file{{ leftBehind.length === 1 ? ' has' : 's have' }}
         no import.
       </p>
       <p class="mt-1 text-sm text-[var(--c-text-secondary)]">
@@ -223,7 +349,7 @@ function resetPaging() {
       </p>
       <ul class="mt-2 divide-y">
         <li
-          v-for="file in unqueued.data.value"
+          v-for="file in leftBehind"
           :key="file.fileId"
           class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-1.5"
         >
@@ -232,19 +358,21 @@ function resetPaging() {
             <p class="text-xs text-[var(--c-text-muted)]">
               {{ file.sourceCode }} · {{ formatBytes(file.sizeBytes) }} · uploaded by {{ file.uploadedBy }},
               <span :title="formatDateTime(file.uploadedAt)">{{ formatRelative(file.uploadedAt) }}</span>
+              <template v-if="file.date"> · dated {{ formatDate(file.date) }}</template>
             </p>
           </div>
-          <Button
-            size="sm"
-            :pending="queueFile.isPending.value && queueFile.variables.value?.fileId === file.fileId"
-            :disabled="queueFile.isPending.value"
-            @click="queueStored(file)"
-          >
+          <Button size="sm" :pending="queueing(file)" :disabled="queueFile.isPending.value" @click="queueStored(file)">
             Queue import
           </Button>
         </li>
       </ul>
-      <p v-if="queueProblem" class="mt-2 text-sm text-[var(--c-danger-text)]" role="status">{{ queueProblem }}</p>
+      <p
+        v-if="queueProblem && !waitingForDate.length"
+        class="mt-2 text-sm text-[var(--c-danger-text)]"
+        role="status"
+      >
+        {{ queueProblem }}
+      </p>
     </div>
 
     <!-- Freshness, per source. Placed above the fold because "is the data current?" is the
@@ -365,19 +493,20 @@ function resetPaging() {
 
       <!-- Upload -->
       <div class="space-y-5">
+        <!-- A file that arrives may wait for its date: the list of those is asked again with the history. -->
         <Card title="Daily subscriber changes" subtitle="One file per day, named with its date">
           <UploadDropzone
             source-code="SQM"
-            hint="daily_subs_device_sim_info_YYYY-MM-DD.csv"
-            @uploaded="history.refetch()"
+            hint="daily_subs_device_sim_info_YYYY-MM-DD.csv - the day is read from the name, however it writes the date."
+            @uploaded="refreshAfterUpload"
           />
         </Card>
 
         <Card title="GSMA TAC database" subtitle="A full snapshot; activated separately">
           <UploadDropzone
             source-code="TAC"
-            hint="Uploading does not change the dashboard. An administrator activates the version."
-            @uploaded="history.refetch()"
+            hint="As GSMA delivers it, .rar and all. Uploading does not change the dashboard: an administrator activates the version."
+            @uploaded="refreshAfterUpload"
           />
         </Card>
 

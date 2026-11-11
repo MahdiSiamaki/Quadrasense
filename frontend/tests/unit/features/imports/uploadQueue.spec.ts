@@ -10,7 +10,11 @@ interface Pending {
   file: File
   onProgress: (fraction: number) => void
   signal: AbortSignal
+  /** What the name says of the date, as the preflight answers it. */
+  preflight: (answer: { dateState: string | null }) => void
   resolve: (jobId: number) => void
+  /** Finishes the upload with any outcome the server can report. */
+  settle: (result: unknown) => void
 }
 
 const pending: Pending[] = []
@@ -21,6 +25,8 @@ vi.mock('@/api/imports', () => ({
     file: File,
     onProgress: (fraction: number) => void,
     signal: AbortSignal,
+    _onRetry: unknown,
+    onPreflight: (answer: unknown) => void,
   ) =>
     new Promise((resolve, reject) => {
       signal.addEventListener('abort', () =>
@@ -31,8 +37,10 @@ vi.mock('@/api/imports', () => ({
         file,
         onProgress,
         signal,
+        preflight: (answer) => onPreflight({ date: null, dateCandidates: [], ...answer }),
         resolve: (jobId) =>
           resolve({ kind: 'queued', jobId, fileName: file.name, sizeBytes: file.size, sha256: '' }),
+        settle: resolve,
       })
     }),
 }))
@@ -150,6 +158,108 @@ describe('the upload queue', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('says while a file uploads that its name has no date, and stops saying it once it is in', async () => {
+    const { items } = useUploadQueue('TAC')
+    enqueue('TAC', [file('DeviceDatabase.csv')])
+    await flushPromises()
+
+    pending[0]!.preflight({ dateState: 'missing' })
+    expect(items.value[0]!.note).toBe(
+      'There is no date in this name. You will be asked for it when the upload finishes.',
+    )
+
+    pending[0]!.settle({
+      kind: 'needsDate',
+      fileId: 41,
+      fileName: 'DeviceDatabase.csv',
+      sizeBytes: 1_000,
+      sha256: '',
+      dateState: 'missing',
+      dateCandidates: [],
+      message: 'There is no date in the name DeviceDatabase.csv. It waits for someone to give it.',
+    })
+    await flushPromises()
+
+    // Stored: an outcome, not a failure, and not the same as waiting its turn to upload.
+    expect(items.value[0]!.status).toBe('needsDate')
+    expect(items.value[0]!.message).toBe(
+      'Stored, not queued yet. There is no date in the name DeviceDatabase.csv. It waits for someone to give it.',
+    )
+    expect(items.value[0]!.note).toBeUndefined()
+  })
+
+  it('says nothing of the date for a name that settles it, or for an archive', async () => {
+    const { items } = useUploadQueue('SQM')
+    enqueue('SQM', [file('daily_2026-10-17.csv')])
+    await flushPromises()
+
+    pending[0]!.preflight({ dateState: 'settled' })
+    expect(items.value[0]!.note).toBeUndefined()
+
+    pending[0]!.preflight({ dateState: null })
+    expect(items.value[0]!.note).toBeUndefined()
+  })
+
+  it('says the date a queued file was given, and when it came from the archive rather than the file', async () => {
+    const { items } = useUploadQueue('SQM')
+    enqueue('SQM', [file('daily_2026-10-17.csv.gz')])
+    await flushPromises()
+
+    pending[0]!.settle({
+      kind: 'queued',
+      jobId: 77,
+      fileName: 'daily_2026-10-17.csv',
+      sizeBytes: 9,
+      sha256: '',
+      date: '2026-10-17',
+      dateFrom: 'name',
+    })
+    await flushPromises()
+
+    expect(items.value[0]!.message).toBe('Queued as import 77 · dated Oct 17, 2026')
+  })
+
+  it('lists what became of each file an archive held, and what was left out of it', async () => {
+    const { items } = useUploadQueue('SQM')
+    enqueue('SQM', [file('october.zip')])
+    await flushPromises()
+
+    const base = { fileId: 1, sizeBytes: 9, sha256: '', existingJobId: null, dateCandidates: [] }
+    pending[0]!.settle({
+      kind: 'archive',
+      archive: 'october.zip',
+      archiveKind: 'zip',
+      files: [
+        { ...base, fileName: 'a.csv', outcome: 'queued', jobId: 77, date: '2026-10-17', dateFrom: 'archive', dateState: 'settled', message: '' },
+        { ...base, fileName: 'b.csv', outcome: 'waiting', jobId: null, date: null, dateFrom: null, dateState: 'missing', message: 'There is no date in the name b.csv.' },
+        { ...base, fileName: 'c.csv', outcome: 'duplicate', jobId: null, existingJobId: 12, date: null, dateFrom: null, dateState: 'settled', message: '' },
+      ],
+      skipped: [{ name: 'readme.txt', reason: 'Not a .csv file.' }],
+    })
+    await flushPromises()
+
+    const item = items.value[0]!
+    expect(item.status).toBe('unpacked')
+    expect(item.message).toBe('Unpacked: 3 files - 1 queued, 1 waiting for its date, 1 already imported; 1 left out')
+    expect(item.lines).toEqual([
+      { name: 'a.csv', tone: 'success', text: "Queued as import 77 · dated Oct 17, 2026, from the archive's name", jobId: 77 },
+      { name: 'b.csv', tone: 'warning', text: 'Stored, not queued yet. There is no date in the name b.csv.', jobId: undefined },
+      { name: 'c.csv', tone: 'warning', text: 'Already imported — see import 12', jobId: undefined },
+      { name: 'readme.txt', tone: 'muted', text: 'Left out. Not a .csv file.' },
+    ])
+  })
+
+  it('goes on to the next file after one that waits for its date', async () => {
+    const { items } = useUploadQueue('SQM')
+    enqueue('SQM', [file('subs.csv'), file('daily_2026-10-17.csv')])
+    await flushPromises()
+
+    pending[0]!.settle({ kind: 'needsDate', fileId: 1, fileName: 'subs.csv', sizeBytes: 9, sha256: '', dateState: 'missing', dateCandidates: [], message: 'x' })
+    await flushPromises()
+
+    expect(items.value.map((i) => i.status)).toEqual(['needsDate', 'uploading'])
   })
 
   it('outlives the page that started it', async () => {

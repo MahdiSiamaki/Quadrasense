@@ -32,6 +32,11 @@ import {
  *
  * Third, the queue is not this component's (uploadQueue.ts): it keeps going when the page is
  * left, says how fast it is going and how long is left, and every file in it can be stopped.
+ *
+ * Fourth, a file may arrive packed - GZ, ZIP or RAR - and is unpacked on the server (ADR-025). An
+ * archive can hold several files, each with an outcome of its own, so its entry lists them. And a
+ * file whose name does not say its date is stored and waits: that is an outcome too, said in the
+ * warning colour because something is still owed, not in the danger colour because nothing failed.
  */
 const props = defineProps<{ sourceCode: string; accept?: string; hint?: string }>()
 const emit = defineEmits<{ uploaded: [] }>()
@@ -71,9 +76,25 @@ const tone: Record<UploadStatus, string> = {
   uploading: 'var(--c-accent)',
   queued: 'var(--c-success-text)',
   duplicate: 'var(--c-warning-text)',
+  needsDate: 'var(--c-warning-text)',
+  unpacked: 'var(--c-text-secondary)',
   failed: 'var(--c-danger-text)',
   cancelled: 'var(--c-text-muted)',
 }
+
+const lineTone = {
+  success: 'var(--c-success-text)',
+  warning: 'var(--c-warning-text)',
+  muted: 'var(--c-text-muted)',
+} as const
+
+/**
+ * What the picker offers. By extension and by type, because a browser lists a .rar under whichever
+ * of the two its system knows. It only narrows the picker: what a file is, the server tells from
+ * its first bytes.
+ */
+const ACCEPTED =
+  '.csv,.gz,.zip,.rar,text/csv,application/gzip,application/zip,application/vnd.rar,application/x-rar-compressed'
 
 const stoppable = (item: UploadItem) => item.status === 'waiting' || item.status === 'uploading'
 </script>
@@ -110,6 +131,7 @@ const stoppable = (item: UploadItem) => item.status === 'waiting' || item.status
           'Several files can be queued at once; they upload one after another, and a broken connection resumes where it stopped.'
         }}
       </span>
+      <span class="text-2xs text-[var(--c-text-muted)]">CSV, or a CSV packed as ZIP, RAR or GZ</span>
     </button>
 
     <!-- Out of the Tab order: the drop zone above opens the same picker, and a stop on an input
@@ -120,7 +142,7 @@ const stoppable = (item: UploadItem) => item.status === 'waiting' || item.status
       multiple
       tabindex="-1"
       class="sr-only"
-      :accept="accept ?? '.csv,text/csv'"
+      :accept="accept ?? ACCEPTED"
       @change="onPick"
     />
 
@@ -179,18 +201,53 @@ const stoppable = (item: UploadItem) => item.status === 'waiting' || item.status
           </p>
         </template>
 
-        <p v-else-if="item.message" class="mt-1 text-2xs" :style="{ color: tone[item.status] }">
-          {{ item.message }}
-          <RouterLink
-            v-if="item.status === 'queued' && item.jobId"
-            :to="`/imports/${item.jobId}`"
-            class="ml-1 underline hover:text-[var(--c-text)]"
-          >
-            Follow it
-          </RouterLink>
-        </p>
+        <template v-else-if="item.message">
+          <p class="mt-1 text-2xs wrap-anywhere" :style="{ color: tone[item.status] }">
+            {{ item.message }}
+            <RouterLink
+              v-if="item.status === 'queued' && item.jobId"
+              :to="`/imports/${item.jobId}`"
+              class="ml-1 underline hover:text-[var(--c-text)]"
+            >
+              Follow it
+            </RouterLink>
+            <!-- Where its date is asked for: the list at the top of the Import Center. -->
+            <a
+              v-if="item.status === 'needsDate'"
+              href="#files-waiting-for-a-date"
+              class="ml-1 underline hover:text-[var(--c-text)]"
+            >
+              Give its date
+            </a>
+          </p>
+
+          <!-- An archive: what became of each file it held, and what was left out of it. -->
+          <ul v-if="item.lines?.length" class="mt-1.5 space-y-1 border-l pl-2">
+            <li v-for="line in item.lines" :key="line.name" class="text-2xs">
+              <span class="font-medium wrap-anywhere">{{ line.name }}</span>
+              <span class="wrap-anywhere" :style="{ color: lineTone[line.tone] }">
+                · {{ line.text }}
+                <RouterLink
+                  v-if="line.jobId"
+                  :to="`/imports/${line.jobId}`"
+                  class="ml-1 underline hover:text-[var(--c-text)]"
+                >
+                  Follow it
+                </RouterLink>
+              </span>
+            </li>
+          </ul>
+        </template>
 
         <p v-else class="mt-1 text-2xs text-[var(--c-text-muted)]">Waiting…</p>
+
+        <!-- Known from the name before a byte is sent: better said now than after the upload. -->
+        <p
+          v-if="item.note && (item.status === 'waiting' || item.status === 'uploading')"
+          class="mt-1 text-2xs text-[var(--c-warning-text)]"
+        >
+          {{ item.note }}
+        </p>
       </li>
     </ul>
 

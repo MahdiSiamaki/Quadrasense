@@ -367,6 +367,16 @@ function toggleRule(summaryId: number) {
                 </dd>
               </div>
 
+              <!-- The archive is not kept: the file inside is what was stored, and hashed above. -->
+              <div v-if="detail.data.value.archiveName">
+                <dt class="text-[var(--c-text-muted)]">Unpacked from</dt>
+                <dd class="mt-0.5 wrap-anywhere">{{ detail.data.value.archiveName }}</dd>
+                <dd class="mt-0.5 text-2xs text-[var(--c-text-muted)]">
+                  The archive it arrived in. Only the file inside is kept, so the same file sent
+                  bare is recognised as this one.
+                </dd>
+              </div>
+
               <div>
                 <dt class="text-[var(--c-text-muted)]">Stored at</dt>
                 <dd class="mt-0.5 font-mono wrap-anywhere">

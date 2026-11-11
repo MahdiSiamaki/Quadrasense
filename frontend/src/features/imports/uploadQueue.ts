@@ -1,6 +1,7 @@
 import { computed, reactive } from 'vue'
-import { uploadImportFile, type UploadResult } from '@/api/imports'
+import { uploadImportFile, type UploadPreflight, type UploadResult } from '@/api/imports'
 import { ApiError } from '@/api/client'
+import { formatDate } from '@/lib/format'
 import { createRateMeter, timeLeftMs, type RateMeter } from '@/lib/transfer-rate'
 
 /**
@@ -13,8 +14,28 @@ import { createRateMeter, timeLeftMs, type RateMeter } from '@/lib/transfer-rate
  * outlives the page, the header shows it from anywhere, and it can be cancelled.
  *
  * One queue per source, as before: a TAC file does not wait behind thirty daily ones.
+ *
+ * `waiting` is a file waiting its turn to be sent. A file that arrived and waits for its *date* is
+ * `needsDate`: stored, nothing to send again, and a person's answer away from being imported.
+ * `unpacked` is an archive, whose files each have an outcome of their own (`lines`).
  */
-export type UploadStatus = 'waiting' | 'uploading' | 'queued' | 'duplicate' | 'failed' | 'cancelled'
+export type UploadStatus =
+  | 'waiting'
+  | 'uploading'
+  | 'queued'
+  | 'duplicate'
+  | 'needsDate'
+  | 'unpacked'
+  | 'failed'
+  | 'cancelled'
+
+/** One file that came out of an archive: what it is called and what became of it. */
+export interface UploadLine {
+  name: string
+  tone: 'success' | 'warning' | 'muted'
+  text: string
+  jobId?: number
+}
 
 export interface UploadItem {
   readonly id: number
@@ -32,6 +53,10 @@ export interface UploadItem {
   reconnecting: number
   message?: string
   jobId?: number
+  /** Said before and while the file is sent: what its name tells of its date, when that is not settled. */
+  note?: string
+  /** For an archive: each file it held. */
+  lines?: UploadLine[]
 }
 
 const items = reactive<UploadItem[]>([])
@@ -131,6 +156,7 @@ async function send(item: UploadItem): Promise<void> {
       },
       controller.signal,
       (attempt) => (item.reconnecting = attempt),
+      (preflight) => (item.note = dateNote(preflight)),
     )
     apply(item, result)
   } catch (error) {
@@ -152,19 +178,90 @@ async function send(item: UploadItem): Promise<void> {
   }
 }
 
+/**
+ * What a name says of its date, for the forty minutes before the server can ask. Nothing for a
+ * name that settles it, and nothing for an archive, whose files are not known yet.
+ */
+function dateNote(preflight: UploadPreflight): string | undefined {
+  switch (preflight.dateState) {
+    case 'ambiguous':
+      return 'The date in this name can be read two ways. You will be asked which when the upload finishes.'
+    case 'several':
+      return 'This name holds more than one date. You will be asked which is the file\'s when the upload finishes.'
+    case 'missing':
+      return 'There is no date in this name. You will be asked for it when the upload finishes.'
+    case 'future':
+      return 'The date in this name has not happened yet. You will be asked for the file\'s date when the upload finishes.'
+    default:
+      return undefined
+  }
+}
+
+/** "dated Nov 9, 2026", and where that came from when it was not the file's own name. */
+function dated(date: string | null | undefined, from: string | null | undefined): string {
+  if (!date) return ''
+  return ` · dated ${formatDate(date)}${from === 'archive' ? ', from the archive\'s name' : ''}`
+}
+
 function apply(item: UploadItem, result: UploadResult): void {
   item.sent = item.file.size
-  if (result.kind === 'queued') {
-    item.status = 'queued'
-    item.jobId = result.jobId
-    item.message = `Queued as import ${result.jobId}`
-    return
-  }
+  item.note = undefined
 
-  item.status = 'duplicate'
-  item.message = result.existingJobId
-    ? `Already imported — see import ${result.existingJobId}`
-    : 'This exact file has already been uploaded'
+  switch (result.kind) {
+    case 'queued':
+      item.status = 'queued'
+      item.jobId = result.jobId
+      item.message = `Queued as import ${result.jobId}${dated(result.date, result.dateFrom)}`
+      return
+
+    case 'duplicate':
+      item.status = 'duplicate'
+      item.message = result.existingJobId
+        ? `Already imported — see import ${result.existingJobId}`
+        : 'This exact file has already been uploaded'
+      return
+
+    case 'needsDate':
+      // Stored: nothing has to be sent again. The page lists it, with what its name can mean.
+      item.status = 'needsDate'
+      item.message = `Stored, not queued yet. ${result.message}`
+      return
+
+    case 'archive': {
+      const count = (outcome: string) => result.files.filter((f) => f.outcome === outcome).length
+      const parts = [
+        [count('queued'), 'queued'],
+        [count('waiting'), `waiting for ${count('waiting') === 1 ? 'its date' : 'their dates'}`],
+        [count('duplicate'), 'already imported'],
+      ]
+        .filter(([n]) => (n as number) > 0)
+        .map(([n, what]) => `${n} ${what}`)
+
+      item.status = 'unpacked'
+      item.message =
+        `Unpacked: ${result.files.length} ${result.files.length === 1 ? 'file' : 'files'} - ${parts.join(', ')}` +
+        (result.skipped.length ? `; ${result.skipped.length} left out` : '')
+      item.lines = [
+        ...result.files.map(
+          (f): UploadLine => ({
+            name: f.fileName,
+            tone: f.outcome === 'queued' ? 'success' : 'warning',
+            text:
+              f.outcome === 'queued'
+                ? `Queued as import ${f.jobId}${dated(f.date, f.dateFrom)}`
+                : f.outcome === 'duplicate'
+                  ? f.existingJobId
+                    ? `Already imported — see import ${f.existingJobId}`
+                    : 'This exact file has already been uploaded'
+                  : `Stored, not queued yet. ${f.message}`,
+            jobId: f.outcome === 'queued' ? (f.jobId ?? undefined) : undefined,
+          }),
+        ),
+        ...result.skipped.map((s): UploadLine => ({ name: s.name, tone: 'muted', text: `Left out. ${s.reason}` })),
+      ]
+      return
+    }
+  }
 }
 
 /** What is left to send, and roughly how long it takes at the speed of the file now uploading. */
