@@ -28,6 +28,7 @@ public sealed class TimelineEndpointTests : IClassFixture<WebApplicationFactory<
     private readonly List<string> _read = [];
     private string[] _held = [Permissions.LookupSubscriber, Permissions.LookupImsi, Permissions.LookupImei];
     private HistoryReadiness _readiness = HistoryReadiness.Ready;
+    private bool _nobodyHoldsIt;
 
     public TimelineEndpointTests(WebApplicationFactory<Program> factory) =>
         _factory = factory.WithWebHostBuilder(host => host.ConfigureTestServices(services =>
@@ -54,6 +55,7 @@ public sealed class TimelineEndpointTests : IClassFixture<WebApplicationFactory<
                 {
                     "GetReadinessAsync" => Task.FromResult(_readiness),
                     "DataThroughAsync" => Task.FromResult<DateOnly?>(new DateOnly(2026, 9, 26)),
+                    "GetAsync" when _nobodyHoldsIt => Task.FromResult(new StoredTimeline([], 0, 3, 8_192)),
                     "GetAsync" => Task.FromResult(new StoredTimeline(
                     [
                         new StoredBinding(Number, Sim, Imei, "35085748", "Samsung", "Galaxy A32", true,
@@ -92,6 +94,21 @@ public sealed class TimelineEndpointTests : IClassFixture<WebApplicationFactory<
             binding.GetProperty("periods")[0].GetProperty("startsInDump").GetBoolean()));
         Assert.Equal(["msisdn", "imsi"], body.GetProperty("groups").EnumerateArray().Select(g => g.GetProperty("kind").GetString()));
         Assert.Equal("2026-09-26", body.GetProperty("dataThrough").GetString());
+    }
+
+    [Fact]
+    public async Task An_identifier_nobody_holds_is_an_empty_timeline_not_a_failure()
+    {
+        // The page has had its words for this since it was built - "No binding has ever held this identifier." -
+        // and never showed them: the route answered 500 until 2026-11-10.
+        _nobodyHoldsIt = true;
+
+        var (status, body, _) = await PostAsync(new { identifier = Imei });
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(0, body.GetProperty("bindings").GetArrayLength());
+        Assert.Equal(0, body.GetProperty("summary").GetProperty("bindings").GetInt32());
+        Assert.Equal(JsonValueKind.Null, body.GetProperty("summary").GetProperty("firstSeen").ValueKind);
     }
 
     [Fact]

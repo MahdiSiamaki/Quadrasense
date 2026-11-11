@@ -125,6 +125,19 @@ public interface IDeviceAnalyticsStore
     Task<DeviceModelIdentity?> GetModelIdentityAsync(string tac, CancellationToken ct);
 
     /// <summary>
+    /// What the active catalogue says each of several TACs is and can do: type, operating system, LTE, 5G, eSIM.
+    /// </summary>
+    /// <remarks>
+    /// One primary-key read for all of them, and nothing from the network: it describes the handsets of a
+    /// lookup's bindings, where <see cref="GetDeviceAsync"/> would put four aggregates behind every binding
+    /// and answer nothing for a model no longer on the network. A TAC the catalogue does not list is absent
+    /// from the answer.
+    /// </remarks>
+    /// <param name="tacs">Eight-digit TACs.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyDictionary<string, DeviceModelFacts>> GetModelFactsAsync(IReadOnlyCollection<string> tacs, CancellationToken ct);
+
+    /// <summary>
     /// Everything connected to one identifier, in whichever direction it is held.
     /// </summary>
     /// <param name="kind">Which of the three the identifier is.</param>

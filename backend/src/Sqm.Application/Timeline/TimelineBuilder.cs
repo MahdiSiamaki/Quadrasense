@@ -86,7 +86,7 @@ public static class TimelineBuilder
                 .GroupBy(x => Key(kind, x.Binding))
                 .Select(g =>
                 {
-                    var first = g.Where(x => x.Life.FirstSeen is not null).MinBy(x => x.Life.FirstSeen);
+                    var first = Earliest(g);
                     var anyBinding = g.First().Binding;
                     return new TimelineGroupInfo(
                         Kind(kind),
@@ -97,8 +97,8 @@ public static class TimelineBuilder
                         kind == TimelineCentre.Imei ? anyBinding.Model : null,
                         g.Count(),
                         g.Any(x => x.Binding.Active),
-                        Iso(first.Life?.FirstSeen),
-                        first.Life?.FirstSeenIsDumpWindow ?? false,
+                        Iso(first?.FirstSeen),
+                        first?.FirstSeenIsDumpWindow ?? false,
                         Iso(g.Max(x => x.Life.LastChange)),
                         [.. LifetimePeriods.Union(g.SelectMany(x => x.Life.Periods)).Select(Period)]);
                 })
@@ -106,7 +106,7 @@ public static class TimelineBuilder
                 .ThenBy(g => g.Key, StringComparer.Ordinal));
         }
 
-        var earliest = lives.Where(x => x.Life.FirstSeen is not null).MinBy(x => x.Life.FirstSeen);
+        var earliest = Earliest(lives);
         var withheld = new[] { TimelineCentre.Msisdn, TimelineCentre.Imsi, TimelineCentre.Imei }
             .Where(k => !Visible(k)).Select(Kind).ToList();
         var handset = stored.Bindings.Count > 0 ? stored.Bindings[0] : null;
@@ -117,8 +117,8 @@ public static class TimelineBuilder
             centre == TimelineCentre.Imei ? handset?.Brand : null,
             centre == TimelineCentre.Imei ? handset?.Model : null,
             new TimelineSummaryInfo(
-                Iso(earliest.Life?.FirstSeen),
-                earliest.Life?.FirstSeenIsDumpWindow ?? false,
+                Iso(earliest?.FirstSeen),
+                earliest?.FirstSeenIsDumpWindow ?? false,
                 Iso(lives.Max(x => x.Life.LastChange)),
                 lives.Count,
                 lives.Count(x => x.Binding.Active),
@@ -140,6 +140,16 @@ public static class TimelineBuilder
             stored.ElapsedMs,
             stored.RowsRead);
     }
+
+    /// <summary>The lifetime that began first, or null when there is none: an identifier nobody holds.</summary>
+    /// <remarks>
+    /// Over the lifetimes, not the pairs they came in. <c>MinBy</c> answers null for an empty sequence only
+    /// when its elements are a reference type; over the (binding, lifetime) tuples it throws, and until
+    /// 2026-11-10 that was a 500 for every identifier with no binding - in the Explorer's timeline and in the
+    /// integration API alike.
+    /// </remarks>
+    private static BindingLifetime? Earliest(IEnumerable<(StoredBinding Binding, BindingLifetime Life)> lives) =>
+        lives.Select(x => x.Life).Where(life => life.FirstSeen is not null).MinBy(life => life.FirstSeen);
 
     private static string Key(TimelineCentre kind, StoredBinding b) => kind switch
     {

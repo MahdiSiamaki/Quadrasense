@@ -173,7 +173,8 @@ internal sealed partial class TacSnapshotProcessor(
                     total > UnusualDiffThreshold ? "warning" : "info",
                     $"{diff.Added:N0} TACs added, {diff.Removed:N0} removed, {diff.Updated:N0} "
                     + $"changed, {diff.Unchanged:N0} unchanged. "
-                    + $"{diff.AffectedActiveBindings:N0} active binding(s) sit on a TAC it adds, removes or changes."
+                    + $"{diff.AffectedActiveBindings:N0} active binding(s) sit on a TAC it adds, removes or changes, "
+                    + "as the Devices page counted them at the last published delivery."
                     + (total > UnusualDiffThreshold
                         ? $" That is well above the {UnusualDiffThreshold:N0} expected for one month's"
                           + " revision - worth confirming this is the intended file before activating."

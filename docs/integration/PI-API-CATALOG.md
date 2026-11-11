@@ -1,8 +1,10 @@
 # PI integration API: catalogue
 
-**Version:** 1.0, under `/api/integration/v1`. **Status:** 2026-11-09. Design: `PI-API-ARCHITECTURE.md` and
-ADR-024. Which system uses what: `PI-INTEGRATION-MATRIX.md`. The machine-readable contract is
-`openapi/pi-integration-v1.json`, held to the code by `IntegrationOpenApiTests`.
+**Version:** 1.0, under `/api/integration/v1`. **Status:** 2026-11-10 (a lookup's bindings carry the handset's
+type and capabilities; an IMEI is accepted with its check digit or as an IMEISV - ADR-024, amendments). Design:
+`PI-API-ARCHITECTURE.md` and ADR-024. Which system uses what: `PI-INTEGRATION-MATRIX.md`. The machine-readable
+contract is `openapi/pi-integration-v1.json`, held to the code by `IntegrationOpenApiTests`; a signed-in person
+reads the same document in the product, in the API guide under Settings.
 
 Every identifier in this page is made up. The repository is public, and the real dataset never appears in
 it.
@@ -14,7 +16,8 @@ it.
 | Base path | `/api/integration/v1`. A breaking change is a `v2` beside it, never a change to `v1` |
 | Authentication | `Authorization: Bearer <token>`, from the token endpoint. A session cookie opens nothing here, and a token opens nothing of the UI's API |
 | Identifiers | In request **bodies**, never URLs (MCI red lines, §2-3 row 7): every read that names a number, SIM or handset is a `POST` |
-| Identifier kinds | `msisdn` (10 digits), `imsi` (15), `iccid` (19, resolved to its IMSI), `imei` (14). Read from the length when `kind` is left out. **No EID**: PI receives no eUICC data |
+| Identifier kinds | `msisdn` (10 digits, with or without a country code), `imsi` (15), `iccid` (19, resolved to its IMSI), `imei` (see below). Read from the length when `kind` is left out. **No EID**: PI receives no eUICC data |
+| An IMEI | PI holds fourteen digits, as the feed carries them. Sent with its check digit (15, `"kind": "imei"`), with the zero a handset transmits in the check digit's place (15), or as an IMEISV (16), it is reduced to those fourteen, and answers name the handset in fourteen. A fifteenth digit that is neither is refused as mistyped. Fifteen digits with no `kind` are an IMSI |
 | Masking | Without `identifiers.reveal`, every IMSI, ICCID, IMEI and number in an answer is masked, but the identifier the client sent. Each answer says `"identifiers": "full"` or `"masked"` |
 | ICCID | Derived from the IMSI by the operator's numbering, and labelled `"iccidSource": "derived"`. No feed PI receives carries one |
 | Dates | `yyyy-MM-dd`; moments ISO 8601 in UTC |
@@ -54,7 +57,8 @@ it.
 
 The administrators' routes are part of the UI's API, behind a session and `integration.manage`:
 `GET/POST /api/v1/integration/clients`, `PUT /api/v1/integration/clients/{id}`,
-`POST /api/v1/integration/clients/{id}/secret`.
+`POST /api/v1/integration/clients/{id}/secret`. Beside them, `GET /api/v1/integration/openapi` gives anyone
+signed in the OpenAPI document the running server generates: it is what the product's API guide reads.
 
 ---
 
@@ -131,6 +135,9 @@ Without `identifiers.reveal`:
       "tac": "35085748",
       "brand": "Samsung",
       "model": "Galaxy A32",
+      "deviceType": "Smartphone",
+      "operatingSystem": "Android",
+      "capabilities": { "lte": true, "fiveG": false, "esim": false },
       "active": true,
       "firstSeen": "2026-09-01",
       "firstSeenIsDumpWindow": false,
@@ -145,6 +152,33 @@ Without `identifiers.reveal`:
 
 With `identifiers.reveal` the same answer carries `"imsi": "432110000000001"`,
 `"iccid": "8998110000000000001"` and `"imei": "35085748000001"`.
+
+**What the handset is** comes with each binding, so "the devices of this number" is one call: `deviceType`,
+`operatingSystem` and `capabilities` from the active GSMA catalogue. A capability is `null` where the catalogue
+does not say, and all three are `null` for a TAC it does not list. The model's full record - bands, SIM slots,
+NFC - is `GET /devices/models/{tac}`.
+
+**An identifier PI does not hold** is an answer, not an error:
+
+```json
+{
+  "kind": "msisdn", "identifier": "9120000009", "resolvedImsi": null, "found": false,
+  "summary": { "bindings": 0, "activeBindings": 0, "numbers": 0, "sims": 0, "handsets": 0, "firstSeen": null, "firstSeenIsDumpWindow": false, "lastChange": null },
+  "bindings": [], "truncated": false, "identifiers": "masked", "dataThrough": "2026-10-31"
+}
+```
+
+**A handset** may be named as the client holds it. Each of these is the same lookup, answered with
+`"identifier": "35085748000001"`:
+
+```json
+{ "identifier": "35085748000001" }
+{ "identifier": "350857480000016", "kind": "imei" }
+{ "identifier": "3508574800000107" }
+```
+
+The second carries the check digit and needs its `kind`, because fifteen digits alone are an IMSI; the third is
+an IMEISV. `"350857480000017"` as an IMEI is refused: its last digit is neither the check digit nor zero.
 
 **An ICCID** is resolved by the operator's numbering and answered as its IMSI:
 
@@ -176,7 +210,7 @@ An ICCID the numbering does not produce is refused with the reason, not reported
 {
   "items": [
     { "index": 0, "outcome": "found", "problem": null, "result": { "…": "a lookup" } },
-    { "index": 1, "outcome": "invalid", "problem": "A phone number (10 digits), an IMSI (15), an ICCID (19) or an IMEI (14). PI holds no EID: no feed it receives carries eUICC data.", "result": null },
+    { "index": 1, "outcome": "invalid", "problem": "A phone number (10 digits), an IMSI (15), an ICCID (19) or an IMEI (14, or 16 as an IMEISV; 15 with its check digit when kind is imei). PI holds no EID: no feed it receives carries eUICC data.", "result": null },
     { "index": 2, "outcome": "found", "problem": null, "result": { "…": "a lookup" } }
   ]
 }

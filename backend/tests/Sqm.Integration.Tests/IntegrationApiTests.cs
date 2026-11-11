@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,6 +34,9 @@ public sealed class IntegrationApiTests : IClassFixture<WebApplicationFactory<Pr
 {
     private const string Secret = "s3cret-for-the-test-client-only-0000000000";
     private const ulong Number = 9121234567, Sim = 432110123456789, OtherSim = 432110987654321;
+
+    /// <summary>A number no binding holds.</summary>
+    private const ulong Unheld = 9120000000;
     private const string Imei = "35085748000001", OtherImei = "35326911000002";
 
     private static readonly Dictionary<string, AuthenticatedUser> People = new(StringComparer.Ordinal)
@@ -49,6 +53,7 @@ public sealed class IntegrationApiTests : IClassFixture<WebApplicationFactory<Pr
     private readonly InMemoryOutbox _outbox = new();
     private readonly List<(TimelineCentre Centre, string Digits)> _timelineReads = [];
     private readonly List<(DateOnly Day, BindingChangeCursor? After, int Limit)> _changeReads = [];
+    private readonly List<IReadOnlyCollection<string>> _modelReads = [];
     private HistoryReadiness _readiness = HistoryReadiness.Ready;
     private int _perMinute = 1000;
 
@@ -87,6 +92,7 @@ public sealed class IntegrationApiTests : IClassFixture<WebApplicationFactory<Pr
             services.AddSingleton(TestStubs.Create<IDeviceAnalyticsStore>((method, args) => method.Name switch
             {
                 "GetDeviceAsync" => Task.FromResult<DeviceDetailRow?>((string)args[0]! == "35085748" ? Device() : null),
+                "GetModelFactsAsync" => ModelFacts((IReadOnlyCollection<string>)args[0]!),
                 "GetRelationshipsAsync" => Task.FromResult(new RelationshipGraph(
                     (string)args[1]!, (RelatedKind)args[0]!, true,
                     [new RelatedNode(Number.ToString(), RelatedKind.Msisdn, 1, 1, null)],
@@ -358,6 +364,106 @@ public sealed class IntegrationApiTests : IClassFixture<WebApplicationFactory<Pr
     }
 
     [Theory]
+    [InlineData("350857480000016", "imei")] // printed on the handset: with its check digit
+    [InlineData("350857480000010", "imei")] // as a handset transmits it: a spare zero in the check digit's place
+    [InlineData("3508574800000107", "imei")] // IMEISV
+    [InlineData("3508574800000107", null)] // sixteen digits are nothing else, so the kind need not be said
+    public async Task An_IMEI_is_accepted_as_other_systems_hold_it_and_answered_in_the_feeds_fourteen_digits(string sent, string? kind)
+    {
+        var token = Token(IntegrationScopes.InventoryRead);
+
+        var (status, body) = await PostAsync("/api/integration/v1/inventory/lookup", new { identifier = sent, kind }, token);
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal((TimelineCentre.Imei, Imei), _timelineReads.Single());
+        Assert.Equal(("imei", Imei), (body.GetProperty("kind").GetString(), body.GetProperty("identifier").GetString()));
+        // The handset the client named is the one it already knows: it is not masked, whichever form named it.
+        Assert.Equal(Imei, Binding(body, "35085748").GetProperty("imei").GetString());
+    }
+
+    [Fact]
+    public async Task Fifteen_digits_are_an_IMSI_unless_the_client_says_imei()
+    {
+        var token = Token(IntegrationScopes.InventoryRead);
+
+        await PostAsync("/api/integration/v1/inventory/lookup", new { identifier = "350857480000016" }, token);
+
+        Assert.Equal((TimelineCentre.Imsi, "350857480000016"), _timelineReads.Single());
+    }
+
+    [Fact]
+    public async Task An_IMEI_whose_check_digit_does_not_match_is_refused_not_looked_up_as_another_handset()
+    {
+        var token = Token(IntegrationScopes.InventoryRead);
+
+        var (status, body) = await PostAsync("/api/integration/v1/inventory/lookup", new { identifier = "350857480000017", kind = "imei" }, token);
+
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        Assert.Contains("mistyped", body.GetProperty("errors").GetProperty("identifier")[0].GetString(), StringComparison.Ordinal);
+        Assert.Empty(_timelineReads);
+    }
+
+    [Fact]
+    public async Task Each_binding_says_what_its_handset_is_and_can_do_and_nothing_for_a_model_the_catalogue_does_not_list()
+    {
+        var token = Token(IntegrationScopes.InventoryRead);
+
+        var (_, body) = await PostAsync("/api/integration/v1/inventory/lookup", new { identifier = Number.ToString() }, token);
+
+        var listed = Binding(body, "35085748");
+        Assert.Equal(("Smartphone", "Android"), (listed.GetProperty("deviceType").GetString(), listed.GetProperty("operatingSystem").GetString()));
+        var can = listed.GetProperty("capabilities");
+        Assert.Equal((true, false), (can.GetProperty("lte").GetBoolean(), can.GetProperty("fiveG").GetBoolean()));
+        // The catalogue does not say whether it has an eUICC: null, never a "no" nobody claimed.
+        Assert.Equal(JsonValueKind.Null, can.GetProperty("esim").ValueKind);
+
+        var unlisted = Binding(body, "35326911");
+        Assert.Equal((JsonValueKind.Null, JsonValueKind.Null, JsonValueKind.Null), (
+            unlisted.GetProperty("deviceType").ValueKind, unlisted.GetProperty("operatingSystem").ValueKind, unlisted.GetProperty("capabilities").ValueKind));
+        // One read of the catalogue for the lookup, for both models at once.
+        Assert.Equal(new[] { "35085748", "35326911" }, _modelReads.Single().Order(StringComparer.Ordinal).ToArray());
+    }
+
+    [Fact]
+    public async Task A_batch_reads_the_catalogue_once_for_a_model_however_many_identifiers_share_it()
+    {
+        var token = Token(IntegrationScopes.InventoryRead);
+
+        var (status, body) = await PostAsync("/api/integration/v1/inventory/lookup/batch",
+            new { identifiers = new object[] { new { identifier = Number.ToString() }, new { identifier = Sim.ToString() }, new { identifier = Imei } } }, token);
+
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(3, _timelineReads.Count);
+        Assert.Single(_modelReads);
+        Assert.All(body.GetProperty("items").EnumerateArray(), item =>
+            Assert.Equal("Smartphone", Binding(item.GetProperty("result"), "35085748").GetProperty("deviceType").GetString()));
+    }
+
+    [Fact]
+    public async Task An_identifier_nobody_holds_is_answered_as_not_found_never_as_a_failure()
+    {
+        // "found": false was in the catalogue from the first day and could not be reached: an empty timeline
+        // threw, and every such lookup, history and facts request answered 500 (found 2026-11-10 on real data).
+        var token = Token(IntegrationScopes.InventoryRead, IntegrationScopes.FactsRead);
+        var unheld = new { identifier = Unheld.ToString() };
+
+        var (lookup, found) = await PostAsync("/api/integration/v1/inventory/lookup", unheld, token);
+        var (history, timeline) = await PostAsync("/api/integration/v1/inventory/history", unheld, token);
+        var (facts, about) = await PostAsync("/api/integration/v1/inventory/facts", unheld, token);
+        var (batch, items) = await PostAsync("/api/integration/v1/inventory/lookup/batch",
+            new { identifiers = new object[] { unheld, new { identifier = Number.ToString() } } }, token);
+
+        Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.OK), (lookup, history, facts, batch));
+        Assert.Equal((false, 0, 0), (
+            found.GetProperty("found").GetBoolean(), found.GetProperty("bindings").GetArrayLength(),
+            found.GetProperty("summary").GetProperty("bindings").GetInt32()));
+        Assert.Equal(0, timeline.GetProperty("timeline").GetProperty("summary").GetProperty("bindings").GetInt32());
+        Assert.Equal((false, 0, JsonValueKind.Null), (
+            about.GetProperty("found").GetBoolean(), about.GetProperty("devices").GetArrayLength(), about.GetProperty("networkAgeDays").ValueKind));
+        Assert.Equal(new[] { "notFound", "found" }, items.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("outcome").GetString()!).ToArray());
+    }
+
+    [Theory]
     [InlineData("89043051200000000000000000000123", "EID")]
     [InlineData("8901260000000000001", "ICCID")]
     [InlineData("12345", "phone number")]
@@ -626,6 +732,31 @@ public sealed class IntegrationApiTests : IClassFixture<WebApplicationFactory<Pr
         Assert.Equal("/api/integration/v1/oauth/token", flow.GetProperty("tokenUrl").GetString());
     }
 
+    [Fact]
+    public async Task The_guides_document_is_for_anyone_signed_in_and_is_the_one_the_API_publishes()
+    {
+        // The API guide under Settings reads the contract from the server it describes (ADR-024, 2026-11-10).
+        using var anonymous = await SendAsync(HttpMethod.Get, IntegrationGuideEndpoints.Route, null, null);
+        using var asSystem = await SendAsync(HttpMethod.Get, IntegrationGuideEndpoints.Route, null, Token(IntegrationScopes.InventoryRead));
+        // The analyst holds no integration permission: reading the contract needs none.
+        using var signedIn = await SendAsync(HttpMethod.Get, IntegrationGuideEndpoints.Route, null, null, session: "analyst");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, asSystem.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, signedIn.StatusCode);
+        Assert.Equal("application/json", signedIn.Content.Headers.ContentType?.MediaType);
+
+        using var client = _factory.CreateClient();
+        using var published = await client.GetAsync("/openapi/integration-v1.json", Ct);
+        var expected = JsonNode.Parse(await published.Content.ReadAsStringAsync(Ct))!.AsObject();
+        var served = JsonNode.Parse(await signedIn.Content.ReadAsStringAsync(Ct))!.AsObject();
+        // The server address is whichever host asked, and the guide shows its own.
+        expected.Remove("servers");
+        Assert.False(served.ContainsKey("servers"));
+        Assert.True(JsonNode.DeepEquals(expected, served), "the guide must read the document the API publishes");
+        Assert.Contains("/api/integration/v1/inventory/lookup", served["paths"]!.AsObject().Select(p => p.Key));
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -647,6 +778,11 @@ public sealed class IntegrationApiTests : IClassFixture<WebApplicationFactory<Pr
             _timelineReads.Add((centre, digits));
         }
 
+        if (digits == Unheld.ToString())
+        {
+            return Task.FromResult(new StoredTimeline([], 0, 3, 8_192));
+        }
+
         return Task.FromResult(new StoredTimeline(
         [
             new StoredBinding(Number, Sim, Imei, "35085748", "Samsung", "Galaxy A32", false,
@@ -654,6 +790,20 @@ public sealed class IntegrationApiTests : IClassFixture<WebApplicationFactory<Pr
             new StoredBinding(Number, OtherSim, OtherImei, "35326911", "Xiaomi", "Redmi Note 13", true,
                 [new BindingEvent(new DateOnly(2026, 8, 31), 219, ChangeLabel.Remove)], false),
         ], 2, 3, 4_096));
+    }
+
+    /// <summary>The catalogue lists the Samsung's TAC and says nothing of its eUICC; it does not list the Xiaomi's.</summary>
+    private Task<IReadOnlyDictionary<string, DeviceModelFacts>> ModelFacts(IReadOnlyCollection<string> tacs)
+    {
+        lock (_modelReads)
+        {
+            _modelReads.Add(tacs);
+        }
+
+        IReadOnlyDictionary<string, DeviceModelFacts> facts = tacs.Contains("35085748")
+            ? new Dictionary<string, DeviceModelFacts>(StringComparer.Ordinal) { ["35085748"] = new("Smartphone", "Android", true, false, null) }
+            : new Dictionary<string, DeviceModelFacts>(StringComparer.Ordinal);
+        return Task.FromResult(facts);
     }
 
     private static DeviceDetailRow Device() => new(

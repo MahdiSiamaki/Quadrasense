@@ -135,3 +135,53 @@ known, and one address - Lodestone's - carries every partner); 30 token requests
 - **Not proved:** a real Lodestone or Tessera calling PI; a real CRM event; an `inventory.day-imported` event from a
   real import (the outbox write is in the completion transaction, proved for the outbox itself, not yet by a day
   imported after this change).
+
+## Amendments, 2026-11-10
+
+The owner asked whether the API covers everything a system could want - "can a system give a number and get its
+devices, and the same for an IMSI or an IMEI?" - and for a place in the product to read the API. The coverage was
+read from the code, and three choices were the owner's the same day: close the two small gaps below and record
+the rest; let anyone signed in read the guide; build the clients page beside it.
+
+- **An identifier nobody holds answered 500, where the catalogue says `"found": false`.** `TimelineBuilder` took
+  the earliest lifetime with `MinBy` over (binding, lifetime) tuples, which throws on an empty sequence of a
+  value type. Lookup, history and facts shared it with the Explorer's timeline route, which had failed the same
+  way since 2026-10-01 and never showed its own words for the case. Every stub in the tests returned bindings,
+  and the first end-to-end run looked up only identifiers read from the data: "not proved" should have listed an
+  unknown identifier, and did not. Found by looking one up against the real data.
+- **An IMEI is accepted as other systems hold it.** The feed carries fourteen digits. Fifteen with the Luhn check
+  digit (as printed, as a CRM keeps it), fifteen with the spare zero a handset transmits in its place, and sixteen
+  as an IMEISV (3GPP TS 23.003 §6.2) are reduced to them, and the answer names the handset in fourteen. A
+  fifteenth digit that is neither is refused as mistyped, not looked up as some other handset. Fifteen digits
+  with no `kind` stay an IMSI; sixteen are nothing else.
+- **Each binding of a lookup says what its handset is**: `deviceType`, `operatingSystem` and `capabilities`
+  (`lte`, `fiveG`, `esim`; null where the catalogue does not say, and for a TAC it does not list). "The devices
+  of this number" had been a lookup and then a device-model call per TAC. One read of the catalogue per lookup,
+  and one per model in a batch. Decision 5 still holds for the bindings; this is the second read that is the
+  integration API's own, and it is a primary-key read of the catalogue, not of the network.
+- **The contract is readable in the product** (matrix D6). `GET /api/v1/integration/openapi` serves the document
+  the running server generates, behind a session and no permission: it holds no data and no secret, and a
+  developer of another system reads it from an account that can do nothing else. The API guide under Settings
+  reads it; a page for registering clients (matrix D5) is built with it.
+- **What the API still does not offer a system**, left until one asks (`docs/backlog.md`): population statistics
+  (the dashboard's figures), catalogue search by name, planning and risk lists, newly arrived models, and
+  delivery of the daily file by a machine.
+
+### How this was proved
+
+- Tests: `ImeiFormTests` (16), `TimelineBuilderTests` (+3) and the Explorer's `TimelineEndpointTests` (+1) for an
+  empty timeline, `IntegrationApiTests` (+10: the four forms of an IMEI, fifteen digits as an IMSI, a mistyped
+  check digit, a binding's device facts and none for an unlisted model, one catalogue read per model in a batch,
+  an identifier nobody holds across lookup, history, facts and batch, and the guide's document for anyone signed
+  in and nobody else). The empty-timeline test was watched failing with "Sequence contains no elements" before
+  the fix.
+- **Five bugs put back, each caught:** any fifteenth digit accepted; a batch forgetting the models it read; the
+  guide's document open to anyone; a binding saying nothing of its handset; sixteen digits not read as an IMEISV.
+- **End to end on the laptop's stack and the real data**, 2026-11-10, with a temporary client: 67 bindings of 40
+  numbers over 53 models, every one carrying its facts, and 25 of 25 models agreeing with the device model route;
+  an IMEI in each form answered as the fourteen-digit lookup; a wrong check digit 400; a number PI does not hold
+  200 and `found: false`. From ClickHouse's query log over 135 lookups: the catalogue read 6.4 ms on average (p90
+  8 ms, 24,516 rows, 4 MiB) beside the timeline read's 173 ms. Forty lookups by number: median 194 ms, p90 245
+  ms. A batch of 50 over 77 models: 9.8 s, 195 ms an identifier, against 235 ms an identifier the day before
+  without the catalogue read.
+- Each commit was built and tested on its own in a clean worktree.

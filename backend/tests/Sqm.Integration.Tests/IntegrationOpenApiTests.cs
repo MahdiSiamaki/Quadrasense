@@ -19,6 +19,12 @@ public sealed class IntegrationOpenApiTests(WebApplicationFactory<Program> facto
 {
     private const string Committed = "docs/integration/openapi/pi-integration-v1.json";
 
+    private static readonly JsonSerializerOptions Readable = new()
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     [Fact]
     public async Task The_committed_document_is_the_one_the_API_generates()
     {
@@ -37,8 +43,10 @@ public sealed class IntegrationOpenApiTests(WebApplicationFactory<Program> facto
         var path = Path.Combine(RepositoryRoot(), Committed);
         if (Environment.GetEnvironmentVariable("SQM_WRITE_OPENAPI") == "1")
         {
-            await File.WriteAllTextAsync(
-                path, generated.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", TestContext.Current.CancellationToken);
+            // Written as people read it: an apostrophe as an apostrophe, not '. The default encoder escapes
+            // every character HTML could misread, which turned a two-schema change into a diff of every
+            // description in the file (2026-11-10). Nothing embeds this file in a page.
+            await File.WriteAllTextAsync(path, generated.ToJsonString(Readable) + "\n", TestContext.Current.CancellationToken);
             return;
         }
 

@@ -1067,6 +1067,49 @@ flagged both days (`15-feed-quality.md`).
 **To bring it back:** restore the two labels and remove `WARNED`.
 `ImportWarningsWording.spec.ts` holds the decision and fails until it is changed.
 
+---
+
+### D18 - What a TAC version would change is read from the per-model mart (2026-11-10)
+
+A TAC import ends by saying how many active bindings sit on a TAC the new version adds, removes or
+changes: the number that tells a reviewer whether the diff matters. It was a count over
+`binding_current FINAL`, and FINAL reads every row version the table holds, not only the live ones.
+
+**What happened.** On 2026-11-10 the GSMA catalogue of 9 November was carried to the department's
+server and queued (import 272). Its 273,284 records were scanned, loaded and their bands parsed in
+twelve seconds; then the count ran past the three-minute statement timeout, on each of the three
+attempts, and the import failed. `binding_current` held 1.26 billion row versions in 31 parts
+there. ClickHouse also went on running each statement after its client had given up - at 41% and
+14% read when they were stopped by hand - so the retries competed with the attempts before them
+(load 11.9 on eight cores).
+
+The same file had imported on the laptop that day, with the laptop idle. Measured there afterwards,
+with 958 million row versions and the laptop busy, the count took 290 s - past the same
+three-minute timeout, which is the analytics HTTP client's on both machines. Nothing had tested it
+against a full table: the only TAC import the server had run was its first, which has nothing to
+compare against.
+
+**The change.** `agg_device_model` already holds the active bindings of every TAC at the last
+published delivery - the figure the Devices page shows for a model. The count is that figure,
+summed over the changed TACs:
+
+| | Rows read | Time | Memory | Answer |
+|---|---|---|---|---|
+| `binding_current FINAL`, laptop | 960,760,000 | 290,151 ms | 1,003 MiB | 69 |
+| `agg_device_model`, laptop | 632,880 | 218 ms | 246 MiB | 69 |
+
+1,547 TACs differ between the two versions; 16 of them carry the 69 bindings.
+
+**What it costs.** The count is as of the last published delivery, not of the instant: a day
+imported and not yet published is not in it. And it leaves out the rows with no handset, as every
+count does (ADR-020), where the scan counted any row whose first eight digits matched. For a
+reviewer deciding whether 1,500 changed TACs matter, neither moves the answer; the import's note
+now says where the figure is from.
+
+**Not done:** a statement that outlives its client is still left running. Stopping it needs the
+query's id kept and a `KILL QUERY` on timeout, for every statement the importer runs; recorded in
+the backlog.
+
 ## 13. Still open
 
 **A second TAC file.** One sound file exists (`DeviceDatabase_TAC1Sep2026.csv`, 270,166 records,

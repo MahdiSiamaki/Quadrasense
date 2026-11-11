@@ -146,9 +146,11 @@ that computes it from the stylesheet.
 #### The estate's door into PI
 
 An integration API for the systems around it - Lodestone first, Tessera for its facts: look up a number, SIM,
-ICCID or handset, its history and what CRM declared about it, each day's changes page by page, and an event
-feed Lodestone pulls. OAuth 2.0 client credentials and scopes, identifiers only in request bodies, and an
-audit trail that never holds one. A day's changes read at 1,000 rows in 115-244 ms.
+ICCID or handset - an IMEI as the caller holds it, with its check digit or as an IMEISV - and get its bindings,
+each saying what its handset is and can do; its history and what CRM declared about it; each day's changes
+page by page; and an event feed Lodestone pulls. OAuth 2.0 client credentials and scopes, identifiers only in
+request bodies, and an audit trail that never holds one. A day's changes read at 1,000 rows in 115-244 ms; a
+lookup by number at a median of 194 ms.
 
 [Catalogue](docs/integration/PI-API-CATALOG.md) · [Integration matrix](docs/integration/PI-INTEGRATION-MATRIX.md) · [Architecture](docs/integration/PI-API-ARCHITECTURE.md) · [ADR-024](docs/adr/ADR-024-integration-api.md)
 
@@ -278,8 +280,8 @@ Before the first sign-in come the grants, the seed and the first administrator.
 how the tests behave.
 
 ```bash
-dotnet test backend/Sqm.slnx    # 941: Domain 243, Ingestion 176, Application 105, Integration 417
-cd frontend && npm test         # 265, in 37 files
+dotnet test backend/Sqm.slnx    # 1,219: Domain 259, Ingestion 176, Application 158, Integration 626
+cd frontend && npm test         # 430, in 50 files
 ```
 
 Integration tests run against a real PostgreSQL and ClickHouse, connected as the least-privileged

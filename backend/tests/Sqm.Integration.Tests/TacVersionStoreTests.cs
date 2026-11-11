@@ -17,6 +17,11 @@ namespace Sqm.Integration.Tests;
 /// "02-Oct-2026" alphabetically - and the affected count kept the TACs with one fingerprint across the
 /// two versions, which are the unchanged ones: 113,038,260 bindings reported for 153 changed TACs.
 /// </para>
+/// <para>
+/// The affected count is read from the per-model mart at the last published delivery. It used to scan
+/// current state with FINAL, and on 2026-11-10 that scan outlasted its timeout three times on the
+/// department's server and failed the import of the 9 November catalogue.
+/// </para>
 /// <para>Against the real ClickHouse, through the real store, in a scratch database.</para>
 /// </remarks>
 [Collection("clickhouse-scratch")]
@@ -48,7 +53,8 @@ public sealed class TacVersionStoreTests : IAsyncLifetime
 
             await QueryAsync($"CREATE DATABASE {_database}");
             await QueryAsync($"CREATE TABLE {_database}.tac_all AS sqm.tac_all");
-            await QueryAsync($"CREATE TABLE {_database}.binding_current AS sqm.binding_current");
+            await QueryAsync($"CREATE TABLE {_database}.agg_device_model AS sqm.agg_device_model");
+            await QueryAsync($"CREATE TABLE {_database}.mart_ready AS sqm.mart_ready");
 
             // Version 1: A, B and C. Version 2: A as it was, B with new bands, C gone, D new.
             // D's date is the newest, and the one a string max gets wrong.
@@ -62,25 +68,18 @@ public sealed class TacVersionStoreTests : IAsyncLifetime
                     (2, '35000004', 'Xiaomi',  '02-Oct-2026', 'LTE')
                 """);
 
-            // Active: 5 on A (unchanged), 3 on B (changed), 2 on C (removed), 1 on D (added).
-            // Four removed bindings on B, which no longer show anywhere, must not count.
+            // The per-model mart, which holds active bindings only. Delivery 7 is the last one published:
+            // 5 on A (unchanged), 3 on B (changed), 2 on C (removed), 1 on D (added). Delivery 6 was
+            // published before it, and delivery 8 is written but not published: neither may be read.
             await QueryAsync($"""
-                INSERT INTO {_database}.binding_current (msisdn, imsi, imei, active, last_change_seq, last_change_date) VALUES
-                    (9120000001, 432110000000001, '35000001000001', 1, 1, '2026-05-01'),
-                    (9120000002, 432110000000002, '35000001000002', 1, 1, '2026-05-01'),
-                    (9120000003, 432110000000003, '35000001000003', 1, 1, '2026-05-01'),
-                    (9120000004, 432110000000004, '35000001000004', 1, 1, '2026-05-01'),
-                    (9120000005, 432110000000005, '35000001000005', 1, 1, '2026-05-01'),
-                    (9120000006, 432110000000006, '35000002000001', 1, 1, '2026-05-01'),
-                    (9120000007, 432110000000007, '35000002000002', 1, 1, '2026-05-01'),
-                    (9120000008, 432110000000008, '35000002000003', 1, 1, '2026-05-01'),
-                    (9120000009, 432110000000009, '35000003000001', 1, 1, '2026-05-01'),
-                    (9120000010, 432110000000010, '35000003000002', 1, 1, '2026-05-01'),
-                    (9120000011, 432110000000011, '35000004000001', 1, 1, '2026-05-01'),
-                    (9120000012, 432110000000012, '35000002000004', 0, 2, '2026-05-02'),
-                    (9120000013, 432110000000013, '35000002000005', 0, 2, '2026-05-02'),
-                    (9120000014, 432110000000014, '35000002000006', 0, 2, '2026-05-02'),
-                    (9120000015, 432110000000015, '35000002000007', 0, 2, '2026-05-02')
+                INSERT INTO {_database}.agg_device_model (seq, tac, bindings, handsets, sims, subscribers) VALUES
+                    (6, '35000002', 30, 30, 30, 30), (6, '35000003', 20, 20, 20, 20), (6, '35000004', 10, 10, 10, 10),
+                    (7, '35000001', 5, 5, 5, 5), (7, '35000002', 3, 3, 3, 3), (7, '35000003', 2, 2, 2, 2), (7, '35000004', 1, 1, 1, 1),
+                    (8, '35000002', 300, 300, 300, 300), (8, '35000004', 100, 100, 100, 100)
+                """);
+            await QueryAsync($"""
+                INSERT INTO {_database}.mart_ready (seq, completed_at, statements) VALUES
+                    (6, '2026-10-30 06:00:00', 31), (7, '2026-10-31 06:00:00', 31)
                 """);
         }
         catch (HttpRequestException ex)
@@ -117,8 +116,21 @@ public sealed class TacVersionStoreTests : IAsyncLifetime
         var diff = await Store().DiffAsync(2, 1, TestContext.Current.CancellationToken);
 
         Assert.Equal((1, 1, 1, 1), (diff.Added, diff.Removed, diff.Updated, diff.Unchanged));
-        // B's three, C's two and D's one; never A's five, never B's removed four.
+        // B's three, C's two and D's one at the last published delivery; never A's five, never another
+        // delivery's figures (60 a day earlier, 400 in the one not yet published).
         Assert.Equal(6, diff.AffectedActiveBindings);
+    }
+
+    [Fact]
+    public async Task Before_any_delivery_is_published_nothing_is_affected_and_nothing_fails()
+    {
+        Assert.SkipWhen(_unavailable is not null, _unavailable ?? "");
+        await QueryAsync($"TRUNCATE TABLE {_database}.mart_ready");
+
+        var diff = await Store().DiffAsync(2, 1, TestContext.Current.CancellationToken);
+
+        Assert.Equal((1, 1, 1, 1), (diff.Added, diff.Removed, diff.Updated, diff.Unchanged));
+        Assert.Equal(0, diff.AffectedActiveBindings);
     }
 
     private ClickHouseTacVersionStore Store() => new(

@@ -15,7 +15,10 @@ public enum InventoryKind
     /// <summary>A SIM, by its ICCID: nineteen digits, resolved to an IMSI by the operator's numbering.</summary>
     Iccid,
 
-    /// <summary>A handset: fourteen digits.</summary>
+    /// <summary>
+    /// A handset: fourteen digits, as the feed carries it. Sent with its check digit (15) or as an IMEISV (16),
+    /// it is reduced to them (<see cref="ImeiForm"/>).
+    /// </summary>
     Imei,
 }
 
@@ -32,12 +35,18 @@ public enum InventoryKind
 /// cannot be answered - it is said so, rather than reported as not found.
 /// </para>
 /// <para>
+/// <b>An IMEI is answered in the feed's form.</b> Other systems hold an IMEI with its check digit, or as an
+/// IMEISV; the feed drops both. Either is reduced to the fourteen digits PI holds, and a check digit that
+/// does not match is refused rather than looked up as some other handset. Fifteen digits with no kind given
+/// are an IMSI, as they are everywhere in this product: nothing else in the feed has that length.
+/// </para>
+/// <para>
 /// <b>No EID.</b> PI receives no eUICC data (docs/architecture/20-estate-landscape.md §4), so an EID is
 /// not an identifier this API accepts.
 /// </para>
 /// </remarks>
 /// <param name="Kind">What it is.</param>
-/// <param name="Digits">The identifier as PI stores it.</param>
+/// <param name="Digits">The identifier as PI stores it: a number as its ten digits, an IMEI as its fourteen.</param>
 /// <param name="Imsi">For an IMSI, itself; for an ICCID, the IMSI it resolves to; otherwise null.</param>
 public readonly record struct InventoryIdentifier(InventoryKind Kind, string Digits, string? Imsi)
 {
@@ -111,18 +120,18 @@ public readonly record struct InventoryIdentifier(InventoryKind Kind, string Dig
                 problem = $"An ICCID is {Iccid.Length} digits.";
                 return false;
 
-            case InventoryKind.Imei when IsDigits(text, Imei.WellFormedLength):
-                identifier = new InventoryIdentifier(InventoryKind.Imei, text, null);
-                problem = null;
+            case InventoryKind.Imei:
+                if (!ImeiForm.TryReduce(text, out var fourteen, out problem))
+                {
+                    return false;
+                }
+
+                identifier = new InventoryIdentifier(InventoryKind.Imei, fourteen, null);
                 return true;
 
-            case InventoryKind.Imei:
-                problem = $"An IMEI is {Imei.WellFormedLength} digits, without its check digit.";
-                return false;
-
             default:
-                problem = "A phone number (10 digits), an IMSI (15), an ICCID (19) or an IMEI (14). PI holds no EID: "
-                          + "no feed it receives carries eUICC data.";
+                problem = "A phone number (10 digits), an IMSI (15), an ICCID (19) or an IMEI (14, or 16 as an IMEISV; "
+                          + "15 with its check digit when kind is imei). PI holds no EID: no feed it receives carries eUICC data.";
                 return false;
         }
     }
@@ -139,7 +148,10 @@ public readonly record struct InventoryIdentifier(InventoryKind Kind, string Dig
             }
         }
 
-        return IsDigits(text, Iccid.Length) ? InventoryKind.Iccid : null;
+        // Sixteen digits are an IMEISV and nineteen an ICCID: no other identifier has either length.
+        return IsDigits(text, Iccid.Length) ? InventoryKind.Iccid
+            : IsDigits(text, ImeiForm.WithSoftwareVersion) ? InventoryKind.Imei
+            : null;
     }
 
     private static bool IsDigits(string text, int length) => text.Length == length && text.All(char.IsAsciiDigit);
