@@ -205,9 +205,10 @@ public sealed class ImportFormatsEndpointTests : IClassFixture<WebApplicationFac
         Assert.Equal(HttpStatusCode.BadRequest, notADate.StatusCode);
         Assert.Equal("Not a date", (await JsonAsync(notADate)).GetProperty("title").GetString());
 
-        using var future = await QueueAsync(client, fileId, "2062-10-17");
+        // This test runs on the real clock: the latest year a name can carry, so it never comes.
+        using var future = await QueueAsync(client, fileId, "2099-10-17");
         Assert.Equal(HttpStatusCode.BadRequest, future.StatusCode);
-        Assert.Equal("2062-10-17 has not happened yet.", (await JsonAsync(future)).GetProperty("detail").GetString());
+        Assert.Equal("2099-10-17 has not happened yet.", (await JsonAsync(future)).GetProperty("detail").GetString());
         Assert.Empty(_ledger.Jobs);
 
         using var queued = await QueueAsync(client, fileId, "2026-10-17");
