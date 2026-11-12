@@ -38,7 +38,8 @@ const emit = defineEmits<{
     empty-message="No saved queries yet. Build one, then choose Save."
     @retry="emit('retry')"
   >
-    <div class="overflow-x-auto">
+    <!-- relative: the hidden "Actions" label stays inside the scroll box (tests/unit/lib/scrollBoxes.spec.ts). -->
+    <div class="relative overflow-x-auto">
       <table class="w-full text-left text-sm">
         <thead class="border-b text-2xs tracking-wide text-[var(--c-text-muted)] uppercase">
           <tr>
