@@ -177,9 +177,9 @@ yet used by the risk rules (matrix D1).
 
 | Task | How |
 |---|---|
-| Register Lodestone | `POST /api/v1/integration/clients` as an administrator with `integration.manage`: `clientId`, `displayName`, `scopes`. The answer carries the secret once; hand it to Lodestone's operator out of band |
-| Rotate a secret | `POST /api/v1/integration/clients/{id}/secret`; the old secret and every token stop at once |
-| Withdraw a system | `PUT /api/v1/integration/clients/{id}` with `isActive: false` |
+| Register Lodestone | **Settings > API clients > Register a system**, as an administrator with `integration.manage` (since 2026-11-12) - or `POST /api/v1/integration/clients`: `clientId`, `displayName`, `scopes`. The secret is shown once, in the dialog or the answer; hand it to Lodestone's operator out of band |
+| Rotate a secret | **New secret** on the client's row, which asks first - or `POST /api/v1/integration/clients/{id}/secret`. The old secret and every token stop at once |
+| Withdraw a system | **Change**, then Active off - or `PUT /api/v1/integration/clients/{id}` with `isActive: false`. Its tokens stop at once |
 | Configuration | Section `Integration`: `TokenLifetime`, `RequestsPerMinute`, `TokenRequestsPerMinute`, `MaxBatch`, `MaxBindings`, `DefaultChangesPage`, `MaxChangesPage`, `MaxEventsPage`, `MaxDeclaredEventsPerRequest`, `OutboxRetentionDays` |
 | Housekeeping | `IntegrationSweeper`, hourly: expired tokens deleted, events past retention pruned |
 | Database | Migration 025 (`integration` schema, permission `integration.manage` for Administrator) and grant 025 |
