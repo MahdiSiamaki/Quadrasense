@@ -14,7 +14,7 @@ export interface SettingsSection {
   to: string
   label: string
   description: string
-  group: 'Personal' | 'Access' | 'Oversight' | 'Catalogue'
+  group: 'Personal' | 'Access' | 'Oversight' | 'Integration' | 'Catalogue'
   /** Any one of these opens it; none listed means everyone. */
   anyOf: readonly PermissionCode[]
 }
@@ -54,6 +54,13 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     description: 'Lists of numbers for a campaign: why, who approved, who downloaded.',
     group: 'Oversight',
     anyOf: [Permission.CampaignExport, Permission.CampaignApprove],
+  },
+  {
+    to: '/settings/api-clients',
+    label: 'API clients',
+    description: 'The systems that call the integration API, their scopes and their secrets.',
+    group: 'Integration',
+    anyOf: [Permission.IntegrationManage],
   },
   {
     to: '/settings/device-images',

@@ -55,9 +55,9 @@ it.
 | `GET /quality/feed` | `quality.read` | Each daily file against the ordinary days |
 | `GET /quality/signals` | `quality.read` | Data-quality signals over the current state |
 
-The administrators' routes are part of the UI's API, behind a session and `integration.manage`:
-`GET/POST /api/v1/integration/clients`, `PUT /api/v1/integration/clients/{id}`,
-`POST /api/v1/integration/clients/{id}/secret`. Beside them, `GET /api/v1/integration/openapi` gives anyone
+The administrators' routes are part of the UI's API, behind a session and `integration.manage`, and what
+**Settings > API clients** reads and presses: `GET/POST /api/v1/integration/clients`,
+`PUT /api/v1/integration/clients/{id}`, `POST /api/v1/integration/clients/{id}/secret`. Beside them, `GET /api/v1/integration/openapi` gives anyone
 signed in the OpenAPI document the running server generates: it is what the product's API guide reads.
 
 ---

@@ -41,6 +41,7 @@ export const Permission = {
   RoleManage: 'role.manage',
   AuditView: 'audit.view',
   SystemAdmin: 'system.admin',
+  IntegrationManage: 'integration.manage',
 } as const
 
 export type PermissionCode = (typeof Permission)[keyof typeof Permission]
