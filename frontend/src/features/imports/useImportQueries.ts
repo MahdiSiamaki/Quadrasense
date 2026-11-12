@@ -109,7 +109,10 @@ export function useBlockages(options: { enabled?: MaybeRefOrGetter<boolean> } = 
   })
 }
 
-/** Stored files with no job. Polled with the blockages: both say why a day is not arriving. */
+/**
+ * Stored files with no job: waiting for a person to give their date, or left before the queue.
+ * Polled with the blockages: both say why a day is not arriving.
+ */
 export function useUnqueuedFiles() {
   return useQuery({
     queryKey: ['imports', 'unqueued-files'],
@@ -155,8 +158,10 @@ export function useImportActions() {
     onSuccess: invalidate,
   })
 
+  // `date` is a person's answer for a file whose name does not settle one; the server refuses a
+  // date the name cannot mean, so nothing is checked here that it would not check again.
   const queueFile = useMutation({
-    mutationFn: (file: UnqueuedFile) => importsApi.queueFile(file),
+    mutationFn: ({ file, date }: { file: UnqueuedFile; date?: string }) => importsApi.queueFile(file, date),
     onSuccess: invalidate,
   })
 

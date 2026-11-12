@@ -103,6 +103,9 @@ public static class ImportWorkerRegistration
 
         services.TryAddSingleton<IImportJobRepository, PostgresImportJobRepository>();
         services.TryAddSingleton<IImportFileStore, DirectoryImportFileStore>();
+
+        // What --import-file hands a file to: the same unpacking and intake as an upload.
+        services.TryAddSingleton<ImportArrivals>();
         services.TryAddSingleton<IAnalyticsIngestionStore, ClickHouseIngestionStore>();
         services.TryAddSingleton<ITacVersionStore, ClickHouseTacVersionStore>();
 

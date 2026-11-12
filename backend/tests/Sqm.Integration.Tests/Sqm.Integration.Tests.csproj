@@ -33,6 +33,11 @@
     <None Include="..\..\..\db\analytics\migrations\*.sql" LinkBase="Migrations\analytics" CopyToOutputDirectory="PreserveNewest" />
     <!-- The mart refresh the worker embeds, so a test can run its statements as they ship. -->
     <None Include="..\..\..\db\analytics\jobs\refresh_marts.sql" LinkBase="Migrations\jobs" CopyToOutputDirectory="PreserveNewest" />
+    <!--
+      RAR archives of synthetic files, packed once with WinRAR: nothing in the runtime, and nothing
+      free, writes RAR. ZIP and gzip are made by the tests that read them. See the README beside them.
+    -->
+    <None Update="Fixtures\Archives\*.rar" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

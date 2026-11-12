@@ -160,9 +160,10 @@ dotnet run -- --load-dump <dump_subs_device_sim_info_*.csv[.gz]>
 # many rows as binding_snapshot.
 dotnet run -- --record-dump <dump_subs_device_sim_info_*.csv[.gz]>
 
-# Hand a file already on this machine to the Import Center, as an upload would. A .gz is
-# decompressed as it is stored; the queue and the processing are the upload's.
-dotnet run -- --import-file <daily_subs_device_sim_info_YYYY-MM-DD.csv[.gz]> [--source SQM|TAC]
+# Hand a file already on this machine to the Import Center, as an upload would: a CSV, or one
+# packed as GZ, ZIP or RAR - what is stored is the file inside (ADR-025). --date is for a file
+# whose name does not say its date. Exits 0 queued, 3 refused, 4 stored and waiting for a date.
+dotnet run -- --import-file <file.csv|.gz|.zip|.rar> [--source SQM|TAC] [--date YYYY-MM-DD]
 
 # "Import again" from the shell: queue a finished import's file as its day's next revision.
 # Refuses when the original is no longer in the file store.

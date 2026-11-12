@@ -16,7 +16,7 @@ decision below, so it is worth stating plainly before anything else.
 | Rows | 270,166 | ~8.26M/day (min 6.6M, max 13.5M) |
 | Size | 197 MiB | ~330–650 MB/day |
 | Cadence | Occasional (monthly or less) | Daily |
-| Business date | In the filename: `DeviceDatabase_TAC1Sep2026.csv` | In the filename: `..._2026-03-15.csv` |
+| Business date | In the filename: `DeviceDatabase_TAC1Sep2026.csv` - or, as GSMA packs it, on the archive's (D20) | In the filename: `..._2026-03-15.csv`, however the name writes the date (D20) |
 | Date inside the file? | Yes — `lastUpdatedDate` per row | **No.** Filename only |
 | Format | CSV, 26 cols, CRLF, RFC-4180 quoted | CSV, 4 cols, LF, unquoted |
 | Natural key | `tac` — verified 0 duplicates | `(msisdn, imsi, imei)` — verified 0 duplicates |
@@ -282,6 +282,7 @@ silently written.
 |---|---|---|
 | Same name, same content | `sha256` already in `import_file` | **Refuse**, status `DUPLICATE`, link to the original import. No processing. |
 | Different name, same content | `sha256` match | **Same** — the name is not the identity. Recorded with both names so it is explainable. |
+| Same file, packed differently | `sha256` of the file **inside** (D19) | **Same.** What is stored and hashed is the CSV, so a catalogue sent bare, as `.gz` and as GSMA's `.rar` is one file. |
 | Same name, different content | Name match, hash differs | **Accept as a new version.** For SQM this becomes revision N+1 for that business date (§6). For TAC, a new `tac_version`. |
 | Some rows already imported | Not detected at file level | Handled by the merge, not by rejection. SQM is idempotent per `(business_date, binding)`; TAC is idempotent per `tac`. Partial overlap is normal and harmless. |
 
@@ -1110,13 +1111,77 @@ now says where the figure is from.
 query's id kept and a `KILL QUERY` on timeout, for every statement the importer runs; recorded in
 the backlog.
 
+### D19 - A file may arrive packed: GZ, ZIP or RAR (2026-11-11, ADR-025)
+
+**Why.** GSMA delivers the catalogue as `DeviceDatabaseTAC09Nov2026.rar`. On 2026-11-10 it was sent
+as it came and read as a CSV; three attempts failed with a message about a constructor (the fault in
+`ResolveSchemaAsync` is fixed beside this). The owner asked that CSV, RAR and ZIP be taken and the
+rest done by the platform.
+
+**What it is.** `ImportArrivals` takes whatever arrives and hands the files inside to the intake.
+What a file is, is told from its first bytes. A CSV is stored as before; a gzip is unpacked as it
+streams in; a ZIP or RAR is copied to `_incoming` on the store's volume, unpacked, and the copy
+removed. **What is stored and hashed is the file inside** - so the same file sent bare and sent
+packed is one file - and the archive is not kept. `--import-file` and resumable uploads go through
+the same code.
+
+| | Packed | Unpacked | Time | Memory |
+|---|---|---|---|---|
+| The catalogue of 9 November, GSMA's RAR | 6.7 MB | 213 MB | 1.0 s | 71 MiB |
+| A 570 MB daily file as ZIP | 217 MB | 570 MB | 2.2 s | 33 MiB |
+| the same as RAR | 201 MB | 570 MB | 6.4 s | 70 MiB |
+
+Short enough to do in the request, which is why it is done there: no second queue, and the answer
+reaches the person who is still on the page. ZIP is read by the runtime (1.75 times as fast as
+SharpCompress on the same file); RAR, which the runtime cannot read, by SharpCompress 0.50.7.
+
+**What an archive may do.** Only `.csv` files are taken, under their own names, never their paths.
+Nothing inside is unpacked twice. A password or one volume of several is refused before anything is
+read. The number of files (100), the size of each (10 GB) and their total (20 GB) are capped by what
+the archive declares and again by what comes out, and 2 GB must stay free on the volume. It is taken
+whole or not at all: one file that does not unpack sound removes the others.
+
+**What the readers do not check, this does.** The runtime's ZIP reader handed back an entry with one
+byte changed, stored or deflated, without complaint; its gzip reader stops quietly where the data
+stops. Both are held to the CRC-32 the archive itself records, before the file is moved into the
+store. `--import-file` had unpacked `.gz` with the runtime's reader alone since 2026-10-25: a day cut
+short in transfer would have imported as a short day.
+
+**Not proven.** RAR 4 (WinRAR 7 no longer writes it), and an archive made with a very large
+dictionary - see ADR-025 and the backlog.
+
+### D20 - Every file has a date somebody settled (2026-11-11, ADR-025)
+
+**Why.** The catalogue sent bare on 2026-11-10 became version `v5124` with no dataset date: the date
+was on the archive's name. And a file's date was read in two places by two rules, each of which knew
+one way of writing a date.
+
+**What it is.** `FileNameDate` reads the ways a name writes a date - `2026-10-17`, `20261017`,
+`17-10-2026`, `09Nov2026`, `November 9, 2026` - and only where the name can mean one: `03-04-2026`
+is 3 April or 4 March and is neither. `FileDate` settles a file's date when it arrives, in order:
+its own name; the name of the archive it is the only file of; a person. A date later than tomorrow
+is never taken.
+
+A file whose date is not settled **gets no job**. It is stored, registered, and listed on the Import
+Center at once with what its name can mean; a person's answer queues it from the stored copy
+(`POST …/unqueued-files/{id}/queue` with a date). The list that D16 added for files left behind is
+the same list: a file with a date on it only needs queueing, a file without one needs an answer.
+
+The date is kept on the file with who gave it (`declared_date`, `declared_date_source`: migration
+026) and written on the import's timeline. A daily file's job still carries it as `business_date`,
+which the queue orders by. A snapshot's job does not - with one it would wait behind every earlier
+dataset that failed - and its version is labelled from the date on the file.
+
 ## 13. Still open
 
-**A second TAC file.** One sound file exists (`DeviceDatabase_TAC1Sep2026.csv`, 270,166 records,
+**A second TAC file.** ~~One sound file exists (`DeviceDatabase_TAC1Sep2026.csv`, 270,166 records,
 270,166 distinct TACs, scanned clean). A second arrived — `DeviceDatabase_TAC16Sep2026.csv` — and
 is a damaged transfer (D10), so it was refused and the diff and activation flow still have not
 been verified against two real versions. Worth obtaining a sound second file before the feature
-is considered done.
+is considered done.~~ **SUPERSEDED, 2026-11-11.** A sound second version has since been diffed
+against the active one on both machines: on 2026-11-10/11 the catalogue of 9 November against
+`v2026.10.04` (273,284 records; 1,454 added, 93 changed, none removed; 69 active bindings on the
+changed TACs - the same answer on both). It found the fault recorded as D18.
 
 **Delivery lag.** The observed files arrived roughly four weeks behind the data they describe.
 That figure drives the freshness alert thresholds in §10, which are currently set from a single

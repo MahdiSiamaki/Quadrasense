@@ -34,6 +34,73 @@ public sealed class ImportQueueTests(ImportQueueFixture fixture) : IClassFixture
     }
 
     /// <summary>
+    /// A file registered without a date waits for one: it is listed at once, and what a person
+    /// then says reaches the worker that imports it.
+    /// </summary>
+    /// <remarks>
+    /// The two-minute grace is for a file about to be queued. A file with no date is not about to be
+    /// queued by anything - the intake has decided to wait - and holding it back for two minutes
+    /// would only hide the question from the person who has just uploaded it.
+    /// </remarks>
+    [Fact]
+    public async Task A_file_with_no_date_is_listed_at_once_and_the_date_it_is_given_reaches_its_job()
+    {
+        if (!await ReadyAsync())
+        {
+            return;
+        }
+
+        var ct = TestContext.Current.CancellationToken;
+
+        try
+        {
+            var file = await fixture.Repository.RegisterFileAsync(
+                TestSource, "DeviceDatabase.csv", Stored(Hash("undated")), "tester", ct);
+
+            var waiting = Assert.Single(await fixture.Repository.GetUnqueuedFilesAsync(ct), f => f.FileId == file.FileId);
+            Assert.Null(waiting.DeclaredDate);
+            Assert.Null(waiting.ArchiveName);
+
+            // The same content again: the earlier copy is found, and still has no date.
+            var again = await fixture.Repository.RegisterFileAsync(
+                TestSource, "DeviceDatabase.csv", Stored(Hash("undated")), "tester", ct);
+            Assert.False(again.IsNew);
+            Assert.Null(again.ExistingJobId);
+            Assert.Null(again.ExistingDeclaredDate);
+
+            await fixture.Repository.SetFileDateAsync(
+                file.FileId, FileDateDecision.Of(new DateOnly(2026, 11, 9), FileDateSource.Person),
+                "DeviceDatabaseTAC09Nov2026.rar", ct);
+
+            var dated = await fixture.Repository.RegisterFileAsync(
+                TestSource, "DeviceDatabase.csv", Stored(Hash("undated")), "tester", ct);
+            Assert.Equal(new DateOnly(2026, 11, 9), dated.ExistingDeclaredDate);
+
+            // A snapshot's job: no business date. The worker reads the date off the file.
+            var job = await fixture.Repository.EnqueueAsync(TestSource, file.FileId, null, "tester", ct: ct);
+            var claimed = await fixture.Repository.ClaimNextAsync("worker-a", TimeSpan.FromMinutes(5), ct);
+
+            Assert.NotNull(claimed);
+            Assert.Equal(job, claimed.JobId);
+            Assert.Null(claimed.BusinessDate);
+            Assert.Equal(new DateOnly(2026, 11, 9), claimed.DeclaredDate);
+            Assert.Equal("DeviceDatabaseTAC09Nov2026.rar", claimed.ArchiveName);
+
+            var detail = await fixture.Repository.GetJobAsync(job, ct);
+            Assert.Equal("DeviceDatabaseTAC09Nov2026.rar", detail?.ArchiveName);
+
+            // The archive a file first came in is its history: a later copy does not rewrite it.
+            await fixture.Repository.SetFileDateAsync(
+                file.FileId, FileDateDecision.Of(new DateOnly(2026, 11, 9), FileDateSource.Archive), "other.zip", ct);
+            Assert.Equal("DeviceDatabaseTAC09Nov2026.rar", (await fixture.Repository.GetJobAsync(job, ct))?.ArchiveName);
+        }
+        finally
+        {
+            await fixture.CleanupAsync(TestSource);
+        }
+    }
+
+    /// <summary>
     /// A later day is not claimable while an earlier one is still unlanded.
     /// </summary>
     /// <remarks>
@@ -178,8 +245,11 @@ public sealed class ImportQueueTests(ImportQueueFixture fixture) : IClassFixture
 
         try
         {
+            // Registered with its date, as the intake registers a file it is about to queue: for a
+            // moment it has no job, and that moment is not "left behind".
             var file = await fixture.Repository.RegisterFileAsync(
-                TestSource, "day.csv", Stored(Hash("unqueued")), "tester", ct);
+                TestSource, "day_2026-05-09.csv", Stored(Hash("unqueued")), "tester", "may.zip",
+                FileDateDecision.Of(new DateOnly(2026, 5, 9), FileDateSource.Name), ct);
 
             Assert.DoesNotContain(await fixture.Repository.GetUnqueuedFilesAsync(ct), f => f.FileId == file.FileId);
 
@@ -187,9 +257,11 @@ public sealed class ImportQueueTests(ImportQueueFixture fixture) : IClassFixture
 
             var listed = Assert.Single(await fixture.Repository.GetUnqueuedFilesAsync(ct), f => f.FileId == file.FileId);
             Assert.Equal(TestSource, listed.SourceCode);
-            Assert.Equal("day.csv", listed.OriginalFileName);
+            Assert.Equal("day_2026-05-09.csv", listed.OriginalFileName);
             Assert.Equal(1024, listed.SizeBytes);
             Assert.Equal("tester", listed.UploadedBy);
+            Assert.Equal("may.zip", listed.ArchiveName);
+            Assert.Equal(new DateOnly(2026, 5, 9), listed.DeclaredDate);
 
             await fixture.Repository.EnqueueAsync(TestSource, file.FileId, new DateOnly(2026, 5, 9), "tester", ct: ct);
 

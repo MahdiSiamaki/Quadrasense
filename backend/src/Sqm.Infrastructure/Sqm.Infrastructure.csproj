@@ -10,6 +10,9 @@
     <PackageReference Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
     <PackageReference Include="MailKit" Version="4.18.2" />
     <PackageReference Include="Npgsql" Version="10.0.3" />
+    <!-- RAR only (ADR-025): GSMA delivers the TAC catalogue as .rar, and the runtime reads ZIP and
+         gzip itself. Pinned: 0.50.7 is what was measured against the real archive. -->
+    <PackageReference Include="SharpCompress" Version="0.50.7" />
   </ItemGroup>
 
   <ItemGroup>

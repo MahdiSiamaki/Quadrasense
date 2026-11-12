@@ -57,6 +57,8 @@ public sealed class ResumableUploadTests : IClassFixture<WebApplicationFactory<P
                         "RegisterFileAsync" => Task.FromResult(new RegisteredFile(
                             41, ((StoredFile)args[2]!).Sha256, IsNew: !_alreadyKnown, _existingJob, "daily.csv")),
                         "EnqueueAsync" => Task.FromResult(77L),
+                        "SetFileDateAsync" => Task.CompletedTask,
+                        "AppendEventAsync" => Task.CompletedTask,
                         "WriteAuditAsync" => Task.CompletedTask,
                         _ => throw new NotSupportedException(method.Name),
                     };

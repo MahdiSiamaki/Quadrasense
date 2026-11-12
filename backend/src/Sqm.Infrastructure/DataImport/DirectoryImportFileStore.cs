@@ -33,6 +33,29 @@ public sealed class ImportStorageOptions
     /// TAC snapshot ~90 MB, so this is generous without being unbounded.
     /// </remarks>
     public long MaxFileBytes { get; set; } = 10L * 1024 * 1024 * 1024;
+
+    /// <summary>Most CSV files taken from one archive.</summary>
+    /// <remarks>
+    /// A month of daily files is thirty-one. A hundred leaves room for that and stops an archive
+    /// that holds a hundred thousand one-line files from becoming a hundred thousand imports.
+    /// </remarks>
+    public int MaxArchiveFiles { get; set; } = 100;
+
+    /// <summary>Largest total one archive may unpack to, in bytes.</summary>
+    /// <remarks>
+    /// Per file the limit is <see cref="MaxFileBytes"/>; this is the limit on their sum. 20 GB is a
+    /// month of the largest daily files seen (570 MB) with room to spare. An archive is the one way
+    /// a small upload becomes a large write: the catalogue's 6.7 MB unpack to 213 MB.
+    /// </remarks>
+    public long MaxArchiveUnpackedBytes { get; set; } = 20L * 1024 * 1024 * 1024;
+
+    /// <summary>Room that must be left on the store's volume when something is unpacked onto it.</summary>
+    /// <remarks>
+    /// Where the store shares a disk with the databases, as it can on a single server, filling it
+    /// stops them. An upload fills a disk at the speed of the network; an archive fills it at the
+    /// speed of the disk, which is why this is checked for archives and was never needed before.
+    /// </remarks>
+    public long MinFreeBytesAfterUnpack { get; set; } = 2L * 1024 * 1024 * 1024;
 }
 
 /// <summary>

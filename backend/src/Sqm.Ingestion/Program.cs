@@ -185,24 +185,27 @@ if (args.Contains("--load-dump"))
 }
 
 // Hands a file already on the server to the Import Center, as an upload would - for files that
-// cannot cross the network in one piece. A .gz is decompressed as it is stored. See ImportFile.
+// cannot cross the network in one piece. A CSV, or one packed as GZ, ZIP or RAR: what is stored is
+// the file inside. --date gives the date of a file whose name does not say it. See ImportFile.
 //
-//   dotnet Sqm.Ingestion.dll --import-file <daily_subs_device_sim_info_YYYY-MM-DD.csv[.gz]> [--source SQM|TAC]
+//   dotnet Sqm.Ingestion.dll --import-file <file.csv|.gz|.zip|.rar> [--source SQM|TAC] [--date YYYY-MM-DD]
 if (args.Contains("--import-file"))
 {
     var index = Array.IndexOf(args, "--import-file");
-    if (index + 1 >= args.Length)
+    var dateAt = Array.IndexOf(args, "--date");
+    if (index + 1 >= args.Length || (dateAt >= 0 && dateAt + 1 >= args.Length))
     {
-        Console.Error.WriteLine("usage: --import-file <file> [--source SQM|TAC]");
+        Console.Error.WriteLine("usage: --import-file <file> [--source SQM|TAC] [--date YYYY-MM-DD]");
         return 2;
     }
 
     var sourceAt = Array.IndexOf(args, "--source");
     return await ImportFile.RunAsync(
-        host.Services.GetRequiredService<IImportJobRepository>(),
-        host.Services.GetRequiredService<IImportFileStore>(),
+        host.Services.GetRequiredService<Sqm.Infrastructure.DataImport.ImportArrivals>(),
         sourceAt >= 0 && sourceAt + 1 < args.Length ? args[sourceAt + 1] : "SQM",
-        args[index + 1], CancellationToken.None).ConfigureAwait(false);
+        args[index + 1],
+        dateAt >= 0 ? args[dateAt + 1] : null,
+        CancellationToken.None).ConfigureAwait(false);
 }
 
 // "Import again" from the shell: queues a finished import's file as its day's next revision.

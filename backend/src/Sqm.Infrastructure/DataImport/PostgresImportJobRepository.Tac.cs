@@ -22,19 +22,40 @@ public sealed partial class PostgresImportJobRepository
         // Created at READY, not DRAFT. The worker has already loaded, checked and diffed it, so
         // by the time this row exists there is nothing left to do but decide - and a status that
         // said DRAFT would suggest otherwise.
+        //
+        // A ROW IS ONE VERSION'S, AND THE VERSION IS THE JOB. Until 2026-11-12 the conflict that
+        // was handled was on the label: a second dataset with the same date - a corrected file,
+        // the same file imported again - took over the first one's row, pointed it at its own
+        // data and set it READY, whatever it had been. Had the first been the ACTIVE version, the
+        // record would have said no version was active while the analytics store went on serving
+        // the old one. A label comes from a date, and a date can now also be typed by a person
+        // (ADR-025), so two versions of one date stopped being a rarity.
+        //
+        // Now the only row a job may rewrite is its own - a retry of the same job, which has the
+        // same analytics version - and a label already held by another version is given a number:
+        // "v2026.11.09 (2)".
         const string Sql = """
             INSERT INTO imports.tac_version
                 (job_id, analytics_version_id, version_label, dataset_date, status, row_count,
                  diff_against_id, tacs_added, tacs_updated, tacs_removed, tacs_unchanged,
                  affected_bindings)
-            VALUES (@job, @analytics, @label, @datasetDate, 'READY', @rows,
+            VALUES (@job, @analytics,
+                    CASE WHEN EXISTS (SELECT 1 FROM imports.tac_version
+                                       WHERE version_label = @label
+                                         AND analytics_version_id IS DISTINCT FROM @analytics)
+                         THEN @label || ' (' || (
+                                SELECT count(*) + 1 FROM imports.tac_version
+                                 WHERE (version_label = @label OR version_label LIKE @label || ' (%)')
+                                   AND analytics_version_id IS DISTINCT FROM @analytics) || ')'
+                         ELSE @label
+                    END,
+                    @datasetDate, 'READY', @rows,
                     (SELECT id FROM imports.tac_version WHERE analytics_version_id = @against),
                     @added, @updated, @removed, @unchanged, @affected)
-            ON CONFLICT (version_label) DO UPDATE
-               SET job_id = EXCLUDED.job_id,
-                   analytics_version_id = EXCLUDED.analytics_version_id,
-                   status = 'READY',
+            ON CONFLICT (analytics_version_id) WHERE analytics_version_id IS NOT NULL DO UPDATE
+               SET dataset_date = EXCLUDED.dataset_date,
                    row_count = EXCLUDED.row_count,
+                   diff_against_id = EXCLUDED.diff_against_id,
                    tacs_added = EXCLUDED.tacs_added,
                    tacs_updated = EXCLUDED.tacs_updated,
                    tacs_removed = EXCLUDED.tacs_removed,
@@ -290,7 +311,7 @@ public sealed partial class PostgresImportJobRepository
                 $"First file for {sourceCode}; its {columns.Count} columns are now the contract.");
         }
 
-        var (verdict, explanation) = SchemaFingerprint.Compare(current.columns, columns);
+        var (verdict, explanation) = SchemaFingerprint.Compare(current.Columns, columns);
 
         if (verdict == SchemaVerdict.Rejected)
         {
@@ -306,7 +327,7 @@ public sealed partial class PostgresImportJobRepository
         await AppendEventCoreAsync(
             connection, transaction, jobId, "warning", "VALIDATING",
             $"New schema version {label}. {explanation}",
-            new { previous = current.version, added = columns.Skip(current.columns.Length) }, ct)
+            new { previous = current.version, added = columns.Skip(current.Columns.Length) }, ct)
             .ConfigureAwait(false);
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
@@ -364,5 +385,17 @@ public sealed partial class PostgresImportJobRepository
 
     private sealed record SchemaRow(int id, string version);
 
-    private sealed record CurrentSchemaRow(int id, string version, string[] columns);
+    /// <remarks>
+    /// <c>Array</c>, not <c>string[]</c>: Npgsql reports a <c>text[]</c> column's type as
+    /// <see cref="Array"/>, and Dapper builds a record through the constructor whose parameter types
+    /// are exactly the columns'. Declared as <c>string[]</c> no constructor matched, so the first
+    /// file of a source whose header was not already on record was not compared at all: it failed
+    /// with "a parameterless default constructor ... is required", three times, and said nothing
+    /// about its header. Found on 2026-11-10 when a <c>.rar</c> was sent as a TAC file; every test
+    /// of this method had been a stub.
+    /// </remarks>
+    private sealed record CurrentSchemaRow(int id, string version, Array columns)
+    {
+        public string[] Columns => (string[])columns;
+    }
 }

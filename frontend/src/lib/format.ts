@@ -193,7 +193,7 @@ export function formatTime(iso: string): string {
   return timeOnly.format(new Date(iso))
 }
 
-/** "3 Feb 2026" — a business date, which has no time of day to show. */
+/** "Feb 3, 2026" — a business date, which has no time of day to show. */
 export function formatDate(iso: string | null): string {
   if (!iso) return '—'
   return new Intl.DateTimeFormat(LOCALE, {

@@ -74,6 +74,7 @@ function job(status: ImportStatus, extra: Partial<ImportJobSummary> = {}): Impor
     supersededByJobId: null,
     supersedesJobId: null,
     reprocessOfJobId: null,
+    archiveName: null,
   }
 }
 

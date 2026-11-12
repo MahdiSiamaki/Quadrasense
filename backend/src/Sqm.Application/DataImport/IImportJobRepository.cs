@@ -30,17 +30,38 @@ public interface IImportJobRepository
     /// code would leave a window in which two concurrent uploads of the same file both see
     /// "not present" and both insert; letting the database refuse the second insert closes it.
     /// </remarks>
+    /// <param name="sourceCode">Data source.</param>
+    /// <param name="originalFileName">The name it arrived under.</param>
+    /// <param name="stored">Where the bytes went, and their hash.</param>
+    /// <param name="uploadedBy">Who sent it.</param>
+    /// <param name="archiveName">The archive it was unpacked from, if it was.</param>
+    /// <param name="fileDate">
+    /// Its date and who gave it, when that is settled; <see langword="null"/> for a file that
+    /// waits for a person to give it.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
     Task<RegisteredFile> RegisterFileAsync(
         string sourceCode,
         string originalFileName,
         StoredFile stored,
         string uploadedBy,
+        string? archiveName,
+        FileDateDecision? fileDate,
         CancellationToken ct);
+
+    /// <summary>Records the date a file was given after it was registered, and who gave it.</summary>
+    /// <param name="fileId">The file.</param>
+    /// <param name="fileDate">The settled date.</param>
+    /// <param name="archiveName">The archive this copy arrived in, kept if the file has none recorded.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task SetFileDateAsync(long fileId, FileDateDecision fileDate, string? archiveName, CancellationToken ct);
 
     /// <summary>Stored files with no job, oldest first.</summary>
     /// <remarks>
-    /// Not one still being finished: a file is registered a moment before its job is queued, and
-    /// that moment was 10.8 seconds at worst on a busy disk (2026-11-03). Two minutes clears it.
+    /// A file with no date is waiting for one and is listed at once. A file with a date is one
+    /// whose upload ended before it reached the queue - but not one still being finished: a file is
+    /// registered a moment before its job is queued, and that moment was 10.8 seconds at worst on a
+    /// busy disk (2026-11-03). Two minutes clears it.
     /// </remarks>
     Task<IReadOnlyList<UnqueuedFile>> GetUnqueuedFilesAsync(CancellationToken ct);
 
@@ -378,6 +399,23 @@ public interface IImportJobRepository
         string? correlationId,
         object? detail,
         CancellationToken ct);
+}
+
+/// <summary>The short forms of <see cref="IImportJobRepository"/>.</summary>
+public static class ImportJobRepositoryExtensions
+{
+    /// <summary>Records a file that came in no archive and has no date to record.</summary>
+    public static Task<RegisteredFile> RegisterFileAsync(
+        this IImportJobRepository repository,
+        string sourceCode,
+        string originalFileName,
+        StoredFile stored,
+        string uploadedBy,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(repository);
+        return repository.RegisterFileAsync(sourceCode, originalFileName, stored, uploadedBy, null, null, ct);
+    }
 }
 
 /// <summary>One rule's worth of validation failures, ready to be recorded.</summary>

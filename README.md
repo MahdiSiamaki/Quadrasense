@@ -56,9 +56,11 @@ time.
 #### Import Center
 
 Resumable uploads, a queue and a worker, validation, late days and revisions, versioned GSMA reference
-data. A day folds into current state in seconds, and its original is kept for good.
+data. A day folds into current state in seconds, and its original is kept for good. A file may arrive
+as CSV or packed as ZIP, RAR or GZ - GSMA's own `.rar` unpacks in a second - and its date is read from
+its name however the name writes it; a name that could mean two dates waits for a person, never a guess.
 
-[The import platform](docs/architecture/09-import-platform.md) · [ADR-018](docs/adr/ADR-018-resumable-uploads.md)
+[The import platform](docs/architecture/09-import-platform.md) · [ADR-018](docs/adr/ADR-018-resumable-uploads.md) · [ADR-025](docs/adr/ADR-025-packed-files-and-file-dates.md)
 
 </td>
 <td valign="top">
@@ -280,8 +282,8 @@ Before the first sign-in come the grants, the seed and the first administrator.
 how the tests behave.
 
 ```bash
-dotnet test backend/Sqm.slnx    # 1,219: Domain 259, Ingestion 176, Application 158, Integration 626
-cd frontend && npm test         # 430, in 50 files
+dotnet test backend/Sqm.slnx    # 1,399: Domain 259, Ingestion 201, Application 246, Integration 693
+cd frontend && npm test         # 445, in 50 files
 ```
 
 Integration tests run against a real PostgreSQL and ClickHouse, connected as the least-privileged
@@ -371,6 +373,7 @@ chosen because of that is [listed](docs/operations/dedicated-hardware.md), to re
 | [ADR-022](docs/adr/ADR-022-account-recovery-and-two-step.md) | Recovery by a code to a proved contact, and an authenticator as the second step | Accepted |
 | [ADR-023](docs/adr/ADR-023-appearance-settings.md) | Each person's look: settings as tokens, steps not free values, one contract with the API, on every page and chart | Accepted |
 | [ADR-024](docs/adr/ADR-024-integration-api.md) | The estate's systems reach PI through an integration API: OAuth 2.0 client credentials issued by PI, scopes, a pulled event feed, declared events in | Accepted |
+| [ADR-025](docs/adr/ADR-025-packed-files-and-file-dates.md) | A file may arrive packed as GZ, ZIP or RAR and is stored as the file inside; every file has a date settled by its name, its archive's, or a person | Accepted |
 
 Every one of these was decided against measurement on the real dataset, not on reputation. Where a claim
 appears in these documents, the number behind it is there too.

@@ -28,3 +28,8 @@ db/operational/grants/*.sql text eol=lf
 *.jpg binary
 *.ico binary
 *.woff2 binary
+
+# Archives are bytes: test fixtures (ADR-025) must reach every checkout exactly as packed.
+*.rar     binary
+*.zip     binary
+*.gz      binary

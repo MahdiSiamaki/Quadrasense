@@ -54,14 +54,15 @@ internal sealed partial class SqmDailyProcessor(
         ArgumentNullException.ThrowIfNull(job);
         ArgumentNullException.ThrowIfNull(context);
 
-        // DailyFileName, not a private copy: the upload endpoint reads the date from the same
-        // rule so the job carries it before any worker sees it, which is what the queue's
-        // ordering constraint is enforced against. Two spellings of one rule would put jobs in
-        // the wrong place in the queue and be very hard to see.
-        var businessDate = job.BusinessDate ?? DailyFileName.BusinessDateOf(job.OriginalFileName)
+        // The day was decided when the file arrived (FileDate) and the job carries it, which is
+        // what the queue's ordering is enforced against. The two fallbacks are for jobs queued
+        // before that was so: the date recorded on the file, then the name read by the same rule
+        // the intake uses. Two spellings of one rule would put jobs in the wrong place in the queue
+        // and be very hard to see.
+        var businessDate = job.BusinessDate ?? job.DeclaredDate ?? FileNameDate.ExactOf(job.OriginalFileName)
             ?? throw new ImportRejectedException(
-                $"Cannot determine which day '{job.OriginalFileName}' describes. The name must "
-                + "contain a date in YYYY-MM-DD form.");
+                $"Cannot determine which day '{job.OriginalFileName}' describes: its name does not "
+                + "say one date, and none was given for it.");
 
         // ---------------------------------------------------------------- validate
         await context.EnterStageAsync(
