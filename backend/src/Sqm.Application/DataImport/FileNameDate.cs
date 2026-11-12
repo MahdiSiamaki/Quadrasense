@@ -114,7 +114,7 @@ public static partial class FileNameDate
         // An entry of an archive arrives with its folders: they are not the file's name.
         var name = fileName[(fileName.LastIndexOfAny(['/', '\\']) + 1)..];
 
-        List<Finding> findings;
+        List<IReadOnlyList<DateOnly>> findings;
         try
         {
             findings = Find(name);
@@ -130,18 +130,18 @@ public static partial class FileNameDate
             return FileNameDateReading.Nothing;
         }
 
-        var certain = findings.Where(f => f.Dates.Count == 1).Select(f => f.Dates[0]).Distinct().ToList();
-        var unsure = findings.Where(f => f.Dates.Count > 1).ToList();
-        var all = findings.SelectMany(f => f.Dates).Distinct().Order().ToList();
+        var certain = findings.Where(f => f.Count == 1).Select(f => f[0]).Distinct().ToList();
+        var unsure = findings.Where(f => f.Count > 1).ToList();
+        var all = findings.SelectMany(f => f).Distinct().Order().ToList();
 
         // One date read one way - and anything written ambiguously beside it can mean that same date.
-        if (certain.Count == 1 && unsure.All(f => f.Dates.Contains(certain[0])))
+        if (certain.Count == 1 && unsure.All(f => f.Contains(certain[0])))
         {
             return new FileNameDateReading(FileNameDateKind.Exact, certain[0], [certain[0]]);
         }
 
         // One date written ambiguously, perhaps more than once the same way.
-        if (certain.Count == 0 && all.Count == 2 && unsure.All(f => f.Dates.Count == 2))
+        if (certain.Count == 0 && all.Count == 2 && unsure.All(f => f.Count == 2))
         {
             return new FileNameDateReading(FileNameDateKind.Ambiguous, null, all);
         }
@@ -149,30 +149,35 @@ public static partial class FileNameDate
         return new FileNameDateReading(FileNameDateKind.Several, null, all);
     }
 
-    /// <summary>A stretch of the name that reads as a date: one date, or two when day and month can swap.</summary>
-    private sealed record Finding(int Start, int Length, IReadOnlyList<DateOnly> Dates);
-
-    private static List<Finding> Find(string name)
+    /// <summary>
+    /// Every stretch of the name that reads as a date, each with the dates it can mean: one, or two
+    /// when day and month can swap.
+    /// </summary>
+    /// <remarks>
+    /// No stretch is read twice. Every pattern refuses to begin or end inside a run of digits, so
+    /// <c>20261017235959</c> is a timestamp and is not also <c>2026-10-17</c> or <c>10 17 2359</c>.
+    /// </remarks>
+    private static List<IReadOnlyList<DateOnly>> Find(string name)
     {
-        var found = new List<Finding>();
+        var found = new List<IReadOnlyList<DateOnly>>();
 
-        void Add(Match match, params DateOnly?[] dates)
+        void Add(params DateOnly?[] dates)
         {
             var real = dates.Where(d => d is not null).Select(d => d!.Value).Distinct().ToList();
             if (real.Count > 0)
             {
-                found.Add(new Finding(match.Index, match.Length, real));
+                found.Add(real);
             }
         }
 
         foreach (Match m in YearFirst.Matches(name))
         {
-            Add(m, Date(m, "y", Number(m, "m"), Number(m, "d")));
+            Add(Date(m, "y", Number(m, "m"), Number(m, "d")));
         }
 
         foreach (Match m in Timestamp.Matches(name))
         {
-            Add(m, Date(m, "y", Number(m, "m"), Number(m, "d")));
+            Add(Date(m, "y", Number(m, "m"), Number(m, "d")));
         }
 
         foreach (Match m in NumbersThenYear.Matches(name))
@@ -180,21 +185,18 @@ public static partial class FileNameDate
             // Day first, and month first: each is offered if it is a real date. 17-10 has one, 03-04 two,
             // 05-05 the same one twice.
             var (a, b) = (Number(m, "a"), Number(m, "b"));
-            Add(m, Date(m, "y", b, a), Date(m, "y", a, b));
+            Add(Date(m, "y", b, a), Date(m, "y", a, b));
         }
 
         foreach (var pattern in new[] { DayMonthYear, MonthDayYear, YearMonthDay })
         {
             foreach (Match m in pattern.Matches(name))
             {
-                Add(m, Date(m, "y", MonthNumber(m.Groups["m"].Value), Number(m, "d")));
+                Add(Date(m, "y", MonthNumber(m.Groups["m"].Value), Number(m, "d")));
             }
         }
 
-        // A finding inside a longer one is the same date read twice: 20261017235959 is not also 10 17 2359.
-        return [.. found.Where(f => !found.Any(other =>
-            !ReferenceEquals(other, f) && other.Length > f.Length
-            && other.Start <= f.Start && other.Start + other.Length >= f.Start + f.Length))];
+        return found;
     }
 
     private static int Number(Match match, string group) =>

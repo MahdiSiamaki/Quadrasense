@@ -186,10 +186,15 @@ public sealed class ImportFormatsEndpointTests : IClassFixture<WebApplicationFac
         // Listed at once, with what can be done about it - and without the server's own path.
         using var list = await client.SendAsync(
             Authenticated(HttpMethod.Get, "/api/v1/imports/unqueued-files"), TestContext.Current.CancellationToken);
+        var listedText = await list.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         var listed = Assert.Single((await JsonAsync(list)).EnumerateArray());
         Assert.Equal(fileId, listed.GetProperty("fileId").GetInt64());
+        Assert.Equal("subs.csv", listed.GetProperty("originalFileName").GetString());
+        Assert.Equal("SQM", listed.GetProperty("sourceCode").GetString());
         Assert.Equal("missing", listed.GetProperty("dateState").GetString());
+        Assert.Equal(JsonValueKind.Null, listed.GetProperty("date").ValueKind);
         Assert.False(listed.TryGetProperty("storedPath", out _));
+        Assert.DoesNotContain(Assert.Single(_ledger.Files).StoredPath, listedText, StringComparison.Ordinal);
 
         // With no date it is refused, and says what it needs.
         using var bare = await QueueAsync(client, fileId, null);
