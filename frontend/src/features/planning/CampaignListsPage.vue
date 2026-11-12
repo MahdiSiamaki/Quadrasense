@@ -84,7 +84,7 @@ function what(r: CampaignExport) {
           <p v-if="list.data.value.requests.length === 0" class="px-4 py-8 text-center text-xs text-[var(--c-text-muted)]">
             No campaign lists yet. Ask for one from a class on the Planning page.
           </p>
-          <div v-else class="overflow-x-auto">
+          <div v-else class="relative overflow-x-auto">
             <table class="w-full text-xs">
               <thead class="bg-[var(--c-surface-sunken)] text-left text-2xs text-[var(--c-text-muted)]">
                 <tr>

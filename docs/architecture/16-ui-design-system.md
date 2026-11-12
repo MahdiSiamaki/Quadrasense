@@ -166,6 +166,14 @@ took the list to its end with the page still, and the second moved the page.
   the tooltip, and the CSV export keeps it whole. Shown whole, the risk lists' headings wrapped to
   one, two or three lines at random column widths.
 - Number columns are right-aligned, heading and figures alike.
+- **A table that scrolls sideways has a positioned scroll box** (`relative overflow-x-auto`). A
+  visually hidden "Actions" header is `sr-only`, which is `position: absolute`, and an overflow box
+  clips an absolutely positioned element only when the box is its containing block. Unpositioned,
+  the label was laid out past the table's end and the page grew to reach it: at 375px, Campaign
+  lists was 483px wide, the API clients page 456px, and saved queries 505px once a query had a long
+  unbroken name - 375px with a short one, so it hid behind the data (2026-11-12). Paint containment
+  (`contain-paint`, the permission matrix) bounds it as well. `tests/unit/lib/scrollBoxes.spec.ts`
+  fails on a box that is neither.
 
 ## The binding timeline's axis
 
