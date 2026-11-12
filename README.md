@@ -282,8 +282,8 @@ Before the first sign-in come the grants, the seed and the first administrator.
 how the tests behave.
 
 ```bash
-dotnet test backend/Sqm.slnx    # 1,219: Domain 259, Ingestion 176, Application 158, Integration 626
-cd frontend && npm test         # 430, in 50 files
+dotnet test backend/Sqm.slnx    # 1,399: Domain 259, Ingestion 201, Application 246, Integration 693
+cd frontend && npm test         # 445, in 50 files
 ```
 
 Integration tests run against a real PostgreSQL and ClickHouse, connected as the least-privileged
