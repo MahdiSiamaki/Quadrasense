@@ -106,6 +106,8 @@ public sealed class ImportQueueFixture : IAsyncLifetime
 
         await using var command = new NpgsqlCommand(
             """
+            DELETE FROM imports.tac_version    WHERE job_id IN (
+                SELECT id FROM imports.import_job WHERE source_code = @source);
             DELETE FROM imports.import_job     WHERE source_code = @source;
             DELETE FROM imports.schema_version WHERE source_code = @source;
             DELETE FROM imports.import_file    WHERE source_code = @source;
