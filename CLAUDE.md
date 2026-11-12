@@ -116,7 +116,7 @@ A person can change the theme, typeface, text size, density, accent, corners and
 (ADR-023). A new page follows if it uses the tokens; a new chart must set its option through
 `setThemedOption` and redraw on `useChartRevision`, and a test fails otherwise.
 
-Eleven traps that have already cost time, all still live:
+Twelve traps that have already cost time, all still live:
 
 - **zrender cannot parse `oklch()`.** Passing a token straight to ECharts yields `undefined` and
   the series disappears on hover. Resolve through `frontend/src/lib/chart-colors.ts`.
@@ -156,6 +156,11 @@ Eleven traps that have already cost time, all still live:
   drew a scrollbar in the PNG, and a zoomed chart exported its last third (2026-11-09). A chart asks
   for `useReportMode` (`tests/unit/design-system/reportMode.spec.ts` fails otherwise), and a widget
   is checked in a real export - a PNG and a printed PDF - not on the dashboard. ADR-016 has the rest.
+- **A hidden table label escapes an unpositioned scroll box.** `sr-only` is `position: absolute`, and
+  an `overflow-x-auto` box that is not positioned does not contain it: a hidden "Actions" header sat
+  past the table's end and widened the page at phone width - by 108px on Campaign lists, and on
+  saved queries only once a query had a long unbroken name (2026-11-12). The box is `relative`;
+  `tests/unit/lib/scrollBoxes.spec.ts` fails otherwise.
 
 The UI conventions these and the layout review settled are in
 `docs/architecture/16-ui-design-system.md`.
