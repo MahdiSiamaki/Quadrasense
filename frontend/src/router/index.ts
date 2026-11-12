@@ -211,6 +211,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Campaign lists', anyPermission: [Permission.CampaignExport, Permission.CampaignApprove] },
       },
       {
+        path: 'api-clients',
+        name: 'api-clients',
+        component: () => import('@/features/integration/IntegrationClientsPage.vue'),
+        meta: { title: 'API clients', permission: Permission.IntegrationManage },
+      },
+      {
         path: 'device-images',
         name: 'device-image-review',
         component: () => import('@/features/devices/DeviceImageReviewPage.vue'),
