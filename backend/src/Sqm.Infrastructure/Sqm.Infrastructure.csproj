@@ -13,6 +13,19 @@
     <!-- RAR only (ADR-025): GSMA delivers the TAC catalogue as .rar, and the runtime reads ZIP and
          gzip itself. Pinned: 0.50.7 is what was measured against the real archive. -->
     <PackageReference Include="SharpCompress" Version="0.50.7" />
+    <!-- The Persian captcha (ADR-026) is drawn on the server, so only a picture reaches the browser.
+         SkiaSharp: System.Drawing is Windows-only, and ImageSharp's licence charges an organisation
+         MCI's size. NoDependencies: its native library brings its own font handling, so the image
+         needs no fontconfig - the typefaces are embedded below. -->
+    <PackageReference Include="SkiaSharp" Version="4.157.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.157.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The captcha's Persian typefaces, embedded so a read-only image needs no font directory.
+         Their licences travel with them, as the OFL asks, into the output. -->
+    <EmbeddedResource Include="Identity\Captcha\Fonts\*.ttf" LogicalName="Sqm.Captcha.Fonts.%(Filename)%(Extension)" />
+    <None Include="Identity\Captcha\Fonts\*.txt" Link="licenses\fonts\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
