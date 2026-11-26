@@ -162,7 +162,7 @@ the rest; let anyone signed in read the guide; build the clients page beside it.
 - **The contract is readable in the product** (matrix D6). `GET /api/v1/integration/openapi` serves the document
   the running server generates, behind a session and no permission: it holds no data and no secret, and a
   developer of another system reads it from an account that can do nothing else. The API guide under Settings
-  reads it; a page for registering clients (matrix D5) is built with it.
+  reads it (under Help since 2026-11-12: below); a page for registering clients (matrix D5) is built with it.
 - **What the API still does not offer a system**, left until one asks (`docs/backlog.md`): population statistics
   (the dashboard's figures), catalogue search by name, planning and risk lists, newly arrived models, and
   delivery of the daily file by a machine.
@@ -185,3 +185,50 @@ the rest; let anyone signed in read the guide; build the clients page beside it.
   ms. A batch of 50 over 77 models: 9.8 s, 195 ms an identifier, against 235 ms an identifier the day before
   without the catalogue read.
 - Each commit was built and tested on its own in a clean worktree.
+
+## Amendment, 2026-11-26: the reference is read under Help
+
+Where the guide sits was the owner's choice on 2026-11-12, asked once the clients page was built:
+
+- **The main menu stays a bar across the top.** The owner had asked for it "horizontal, like Ganjineh";
+  Ganjineh's is a dark sidebar on the left that folds, so the two could not both hold, and the bar stayed.
+- **Help is an item of the main menu, for everyone signed in**, not a page of Settings: the API's guides sit
+  beside guides to importing files and reading the figures, and Settings is for configuring the system. No
+  permission on any of it, as the route it reads asks none (above).
+- **The reference is PI's own page, not Swagger UI.** Ganjineh's is Swagger UI, whose *Try it out* sends a real
+  request from the page - which would have a system's secret typed into a browser. Each route gives a request to
+  start from instead: `curl`, the secret read from a variable, to run where the secret already is. A console
+  waits on a safe credential (`docs/backlog.md`).
+
+The page lays out `GET /api/v1/integration/openapi`: every route under its tag, the scope it needs (none, for the
+token route), its parameters and body fields, its answers (a refusal named as a problem document), a request to
+start from, and the document itself to download. A nested object opens on request, a level at a time - drawn
+ahead, the answers' 52 schemas would put thousands of hidden rows in the page - and a schema that holds itself is
+not offered again inside itself. It cannot describe a route the server does not have: the document is the one
+`IntegrationOpenApiTests` holds to the code. Beside it, *Connecting a system* gives the three steps and the
+conventions of the catalogue above.
+
+### How this was proved
+
+- Tests: `openapi.spec.ts` (11) holds the reader to the committed document - every route once, in tag order;
+  every property of all 52 schemas typed; "or null" however 3.1 writes it; the token request with HTTP Basic and
+  the secret from a variable. `ApiReference.spec.ts` (11), `SchemaFields.spec.ts` (2) and `HelpLayout.spec.ts`
+  (3) hold the page and its frame. **Eleven faults put back, each caught:** Help asking a permission; a schema that
+  holds itself offered again; nested levels drawn before they are opened; the secret written into the command; a
+  `oneOf` with null not read; a scoped route said to take any token; the description's full stop doubled; an
+  address naming a route ignored; the anchor looked for before the routes are drawn; a new page keeping the old
+  scroll; the phone's row of guides scrolling again. A twelfth went uncaught - a guard against scrolling pages
+  outside Help - because the frame is gone before it could act; it was removed as dead code.
+- In a browser (Playwright's Chromium, 2026-11-26), the API stubbed in the page for a person holding only
+  `dashboard.view`: Help is in the main menu and `/help` opens *Importing files*; the only requests are the
+  person and the document. 13 routes in the document, 13 on the page and 13 in the index; 7 scopes listed. An
+  index link puts its route 80 px from the top, below the 57 px bar. Copy puts the shown command on the clipboard
+  (Windows turns its line ends to CRLF). Light and dark. No page wider than the screen at 320, 375, 768, 1023
+  or 1440 px.
+- **Four faults found there, not by the tests, and fixed:** the heading put the document's description inside a
+  sentence of its own and doubled its full stop ("…CATALOG.md.."); a guide chosen from the end of the API reference
+  (6,334 px down) opened at its own end, its title 350 px above the screen - the menu is sticky and the router
+  keeps the scroll position; an address naming a route opened at the top, 3,198 px above it, because the browser
+  looks for the anchor before the document arrives; and on a phone the row of guides hid the API reference past
+  its edge - 11 px out even once scrolled to, when the page's scrollbar arrived with the document. The guides now
+  wrap: two lines at 320 and 375 px, every one in sight.

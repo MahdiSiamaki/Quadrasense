@@ -64,6 +64,8 @@ const nav = computed(() =>
     { to: '/quality', label: 'Data quality', show: can(Permission.ImportView) },
     // Users, roles, the audit log and device image review moved to Settings (the gear): they
     // configure the system, and this bar is for the work done in it.
+    // Help is for everyone signed in: guides, and the integration API's reference (owner, 2026-11-12).
+    { to: '/help', label: 'Help', show: true },
   ].filter((item) => item.show),
 )
 

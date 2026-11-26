@@ -224,6 +224,42 @@ const routes: RouteRecordRaw[] = [
       },
     ],
   },
+  /*
+    Help: guides, and the integration API's reference. No permission on any of it - everyone signed
+    in may read how PI works and how a system calls it (the owner's choice, 2026-11-10 and -12).
+  */
+  {
+    path: '/help',
+    component: () => import('@/features/help/HelpLayout.vue'),
+    meta: { title: 'Help' },
+    children: [
+      { path: '', name: 'help', redirect: '/help/importing-files' },
+      {
+        path: 'importing-files',
+        name: 'help-importing-files',
+        component: () => import('@/features/help/ImportingFilesGuide.vue'),
+        meta: { title: 'Importing files' },
+      },
+      {
+        path: 'reading-the-numbers',
+        name: 'help-reading-the-numbers',
+        component: () => import('@/features/help/ReadingNumbersGuide.vue'),
+        meta: { title: 'Reading the numbers' },
+      },
+      {
+        path: 'connecting-a-system',
+        name: 'help-connecting-a-system',
+        component: () => import('@/features/help/ConnectingSystemGuide.vue'),
+        meta: { title: 'Connecting a system' },
+      },
+      {
+        path: 'api-reference',
+        name: 'help-api-reference',
+        component: () => import('@/features/help/ApiReference.vue'),
+        meta: { title: 'API reference' },
+      },
+    ],
+  },
   // Where these pages used to live. Bookmarks and links already sent keep working.
   { path: '/admin/users', redirect: (to) => ({ path: '/settings/users', query: to.query }) },
   { path: '/admin/users/:id(\\d+)', redirect: (to) => `/settings/users/${String(to.params['id'])}` },

@@ -5,8 +5,8 @@ using Microsoft.OpenApi;
 namespace Sqm.Api.Integration;
 
 /// <summary>
-/// The integration API's contract for the people who read it in the product: the API guide under Settings
-/// (ADR-024, amended 2026-11-10).
+/// The integration API's contract for the people who read it in the product: the API reference under Help
+/// (ADR-024, amended 2026-11-10 and 2026-11-26).
 /// </summary>
 /// <remarks>
 /// <para>
