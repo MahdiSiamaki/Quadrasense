@@ -51,6 +51,15 @@ them rather than rediscovering them.
 - Page header: `h1` `text-xl font-semibold`, subtitle `mt-0.5 text-sm text-[var(--c-text-secondary)]`.
 - **20px between page blocks**, everywhere. Use the page's `gap`, never margins between siblings.
 
+### Section menus: Settings and Help
+
+A section of several pages lists them beside the page from the large breakpoint up, sticky, and above the page
+below it. There Settings' seven scroll in one row; Help's four guides wrap instead, because a row that scrolls
+can hide the page being read: Help's hid the API reference past its edge at 375 px - 11 px out even once
+scrolled to, when the page's scrollbar arrived with the document (2026-11-26). A Help page opens at its top:
+with the menu sticky, a guide is often chosen from the end of another, and the router keeps the scroll position
+(`docs/backlog.md`, for the rest of the app).
+
 ### AsyncBoundary lays out what it loads
 
 `AsyncBoundary` renders the four async states. Its root is a flex column with a `gap` prop
@@ -470,3 +479,4 @@ Design audit, Phase 3 (`feature/design-audit-phase3`):
 | 2026-10-08 | Rows, nav links and chart bars change at once; busy dims fade | 1a2f537 |
 | 2026-10-08 | Drop zone no longer flickers under a dragged file | db0c70a |
 | 2026-11-05 | The page keeps the wheel: containment on overlays only, charts zoom on Ctrl + wheel | see git log |
+| 2026-11-26 | Help: guides and the API reference; its guides wrap above the page on a phone; a Help page opens at its top | see git log |

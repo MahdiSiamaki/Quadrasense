@@ -4,7 +4,7 @@
 type and capabilities; an IMEI is accepted with its check digit or as an IMEISV - ADR-024, amendments). Design:
 `PI-API-ARCHITECTURE.md` and ADR-024. Which system uses what: `PI-INTEGRATION-MATRIX.md`. The machine-readable
 contract is `openapi/pi-integration-v1.json`, held to the code by `IntegrationOpenApiTests`; a signed-in person
-reads the same document in the product, in the API guide under Settings.
+reads the same document in the product, under Help > API reference.
 
 Every identifier in this page is made up. The repository is public, and the real dataset never appears in
 it.
@@ -58,7 +58,7 @@ it.
 The administrators' routes are part of the UI's API, behind a session and `integration.manage`, and what
 **Settings > API clients** reads and presses: `GET/POST /api/v1/integration/clients`,
 `PUT /api/v1/integration/clients/{id}`, `POST /api/v1/integration/clients/{id}/secret`. Beside them, `GET /api/v1/integration/openapi` gives anyone
-signed in the OpenAPI document the running server generates: it is what the product's API guide reads.
+signed in the OpenAPI document the running server generates: it is what Help > API reference reads.
 
 ---
 

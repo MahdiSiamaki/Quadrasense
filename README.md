@@ -152,7 +152,8 @@ ICCID or handset - an IMEI as the caller holds it, with its check digit or as an
 each saying what its handset is and can do; its history and what CRM declared about it; each day's changes
 page by page; and an event feed Lodestone pulls. OAuth 2.0 client credentials and scopes, identifiers only in
 request bodies, and an audit trail that never holds one. A day's changes read at 1,000 rows in 115-244 ms; a
-lookup by number at a median of 194 ms.
+lookup by number at a median of 194 ms. Its reference is in the product, under Help, drawn from the document the
+running server generates - so it is the API as it runs - beside guides to importing files and reading the figures.
 
 [Catalogue](docs/integration/PI-API-CATALOG.md) · [Integration matrix](docs/integration/PI-INTEGRATION-MATRIX.md) · [Architecture](docs/integration/PI-API-ARCHITECTURE.md) · [ADR-024](docs/adr/ADR-024-integration-api.md)
 
@@ -426,7 +427,7 @@ backend/
   src/Sqm.Api            minimal-API endpoints
   src/Sqm.Ingestion      the import worker, and the batch commands
   src/Sqm.Migrator       forward-only schema migrator for both stores
-frontend/          Vue 3 SPA: dashboards, Import Center, Explorer, devices, risk, planning, feed quality, users, roles, audit
+frontend/          Vue 3 SPA: dashboards, Import Center, Explorer, devices, risk, planning, feed quality, users, roles, audit, help
 db/
   analytics/       ClickHouse migrations, batch jobs and seeds
   operational/
