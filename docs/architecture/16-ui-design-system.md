@@ -269,6 +269,13 @@ its ticket must not outlive the page. Recovery is a route, `/recover`, and its w
 the server answers the same whether or not the account exists, so the page says what is true for
 everyone and shows no masked address.
 
+**The captcha** (`CaptchaField.vue`, ADR-026) is the one Persian element of the product, and the one set
+right to left: the picture with a "New picture" button, the answer box (`dir="rtl"`, `lang="fa"`), and an
+on-screen keyboard of exactly the characters the server says a captcha may hold. Its face is the
+`--font-persian` token, Vazirmatn, the only web font the page loads for it - restricted by `unicode-range`
+to Arabic script, so no other page downloads it. It appears only once the server asks, and stays for the
+rest of the visit; its labels are English like everything around it.
+
 ## Colour for words
 
 Status colours are light enough for a dot, a bar or a border, not for a word at 11-12px: warning
@@ -480,3 +487,4 @@ Design audit, Phase 3 (`feature/design-audit-phase3`):
 | 2026-10-08 | Drop zone no longer flickers under a dragged file | db0c70a |
 | 2026-11-05 | The page keeps the wheel: containment on overlays only, charts zoom on Ctrl + wheel | see git log |
 | 2026-11-26 | Help: guides and the API reference; its guides wrap above the page on a phone; a Help page opens at its top | see git log |
+| 2026-11-27 | The Persian captcha on sign-in and recovery: right to left, Vazirmatn, an on-screen keyboard | see git log |

@@ -112,9 +112,11 @@ left out of every count.
 #### Identity and audit
 
 Local sign-in, server-side sessions, permission-based RBAC, and an audit trail PostgreSQL itself keeps
-append-only. A test enumerates the router to prove no endpoint escapes a permission.
+append-only. A test enumerates the router to prove no endpoint escapes a permission. After three failed
+sign-ins, a Persian captcha drawn on the server, as MCI's red line asks: five typefaces, twelve patterns,
+an on-screen keyboard - and off-the-shelf OCR read none of 300.
 
-[Identity and access](docs/architecture/12-identity-and-access.md) · [ADR-006](docs/adr/ADR-006-authentication-and-access-control.md)
+[Identity and access](docs/architecture/12-identity-and-access.md) · [ADR-006](docs/adr/ADR-006-authentication-and-access-control.md) · [ADR-026](docs/adr/ADR-026-persian-captcha.md)
 
 </td>
 </tr>

@@ -29,6 +29,62 @@ async function fillIn(w: Page, code = '123456', password = GOOD_PASSWORD) {
   await fields[1]!.setValue(password)
 }
 
+describe('the captcha, after five wrong codes', () => {
+  const CAPTCHA = '/api/v1/auth/captcha'
+  const picture = (id: string) => ({
+    status: 200,
+    body: { id, image: `data:image/png;base64,${id}`, expiresAt: new Date(Date.now() + 600_000).toISOString(), alphabet: 'بتج۲۳' },
+  })
+  const asked = {
+    status: 400,
+    body: { title: 'One or more validation errors occurred.', status: 400, errors: { captcha: ['Type the characters in the picture.'] } },
+  }
+
+  it('appears when the server names it, says why, and sends the answer with the next request', async () => {
+    const api = fakeApi({
+      [OPTIONS_PATH]: { status: 200, body: OPTIONS },
+      [START]: [asked, { status: 202 }],
+      [CAPTCHA]: [picture('c1'), picture('c2')],
+    })
+    const { wrapper } = await mountPage(RecoverPage, '/recover')
+
+    await askForCode(wrapper)
+
+    expect(wrapper.get('fieldset legend').text()).toBe('Security check')
+    expect(wrapper.text()).toContain('Type the characters in the picture.')
+
+    await wrapper.findAll('[role="group"] button')[1]!.trigger('click')
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(api.bodyOf(START)).toMatchObject({ identifier: 'a.person', captchaId: 'c1', captchaAnswer: 'ت' })
+    expect(wrapper.find('input[autocomplete="one-time-code"]').exists()).toBe(true)
+  })
+
+  it('holds the code step back until the characters are typed, once it has been asked for', async () => {
+    fakeApi({
+      [OPTIONS_PATH]: { status: 200, body: OPTIONS },
+      [START]: { status: 202 },
+      [COMPLETE]: {
+        status: 400,
+        body: { title: 'x', status: 400, errors: { code: ['That code is not right.'], captcha: ['Type the characters in the picture as well.'] } },
+      },
+      [CAPTCHA]: picture('c1'),
+    })
+    const { wrapper } = await mountPage(RecoverPage, '/recover')
+
+    await askForCode(wrapper)
+    await fillIn(wrapper)
+    await wrapper.find('form').trigger('submit')
+    await settle()
+
+    expect(wrapper.text()).toContain('Type the characters in the picture as well.')
+    await fillIn(wrapper)
+    const button = wrapper.findAll('button').find((b) => b.attributes('type') === 'submit')!
+    expect(button.attributes('disabled')).toBeDefined()
+  })
+})
+
 describe('asking for a code', () => {
   it('says plainly when this system cannot send one', async () => {
     fakeApi({

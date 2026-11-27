@@ -12,6 +12,9 @@ public static class AuthEndpoints
     /// <summary>Rate-limiter partition name for the login endpoint.</summary>
     public const string LoginRateLimiter = "login";
 
+    /// <summary>Rate-limiter partition name for new captcha pictures.</summary>
+    public const string CaptchaRateLimiter = "captcha";
+
     /// <summary>Registers the authentication routes.</summary>
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
@@ -24,6 +27,12 @@ public static class AuthEndpoints
             .RequireRateLimiting(LoginRateLimiter)
             .WithName("Login")
             .WithSummary("Exchanges a username and password for a session cookie.");
+
+        group.MapGet("/captcha", IssueCaptchaAsync)
+            .AllowAnonymous()
+            .RequireRateLimiting(CaptchaRateLimiter)
+            .WithName("IssueCaptcha")
+            .WithSummary("A picture of Persian characters to type, asked for after failed sign-ins (ADR-026).");
 
         group.MapPost("/login/two-step", CompleteTwoStepAsync)
             .AllowAnonymous()
@@ -93,12 +102,14 @@ public static class AuthEndpoints
         IUserDirectory users,
         ITwoStepService twoStep,
         IAppearanceStore appearance,
+        CaptchaGate captcha,
         IOptions<AuthOptions> authOptions,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(twoStep);
+        ArgumentNullException.ThrowIfNull(captcha);
         ArgumentNullException.ThrowIfNull(authOptions);
 
         if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrEmpty(request.Password))
@@ -110,13 +121,33 @@ public static class AuthEndpoints
         }
 
         var context = CurrentUser.Context(http);
+        var username = request.Username.Trim();
+
+        // The Persian captcha, after three failed sign-ins (MCI red line, ADR-026). Before the password,
+        // so a wrong answer is never a failed password.
+        var verdict = await captcha
+            .CheckAsync(CaptchaScope.Login, http, username, request.CaptchaId, request.CaptchaAnswer, ct)
+            .ConfigureAwait(false);
+
+        if (verdict is CaptchaVerdict.Missing or CaptchaVerdict.Wrong)
+        {
+            return Results.Json(new LoginFailure(
+                "CaptchaRequired",
+                verdict == CaptchaVerdict.Missing
+                    ? "Type the characters in the picture, then sign in."
+                    : "Those characters did not match the picture. Try the new one.",
+                LockedUntil: null,
+                CaptchaRequired: true), statusCode: StatusCodes.Status401Unauthorized);
+        }
 
         var outcome = await authenticator
-            .AuthenticateAsync(request.Username.Trim(), request.Password, context, ct)
+            .AuthenticateAsync(username, request.Password, context, ct)
             .ConfigureAwait(false);
 
         if (outcome.Status == LoginStatus.TwoStepRequired)
         {
+            await captcha.SucceededAsync(CaptchaScope.Login, username, ct).ConfigureAwait(false);
+
             var challenge = await twoStep
                 .BeginChallengeAsync(outcome.UserId!.Value, request.RememberMe, ct)
                 .ConfigureAwait(false);
@@ -128,15 +159,46 @@ public static class AuthEndpoints
 
         if (!outcome.Succeeded)
         {
+            await captcha.FailedAsync(CaptchaScope.Login, http, username, ct).ConfigureAwait(false);
+
             return Results.Json(new LoginFailure(
                 outcome.Status.ToString(),
                 Message(outcome),
-                outcome.LockedUntil), statusCode: StatusCodes.Status401Unauthorized);
+                outcome.LockedUntil,
+                await captcha.RequiredAsync(CaptchaScope.Login, http, username, ct).ConfigureAwait(false)),
+                statusCode: StatusCodes.Status401Unauthorized);
         }
+
+        await captcha.SucceededAsync(CaptchaScope.Login, username, ct).ConfigureAwait(false);
 
         return await StartSessionAsync(
             outcome.UserId!.Value, request.RememberMe, http, sessions, users, twoStep, appearance,
             authOptions.Value.Session, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>A new captcha picture.</summary>
+    /// <remarks>
+    /// Issued to anyone who asks, at most a few a minute per address: the page asks only once a sign-in
+    /// has said a captcha is needed, and a picture without an answer opens nothing.
+    /// </remarks>
+    private static async Task<IResult> IssueCaptchaAsync(
+        string? theme, HttpContext http, ICaptchaService captcha, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(captcha);
+
+        var challenge = await captcha
+            .IssueAsync(string.Equals(theme, "dark", StringComparison.OrdinalIgnoreCase) ? CaptchaTheme.Dark : CaptchaTheme.Light, ct)
+            .ConfigureAwait(false);
+
+        // One answer, once: never from a cache.
+        http.Response.Headers.CacheControl = "no-store";
+
+        return Results.Ok(new CaptchaResponse(
+            challenge.Id,
+            "data:image/png;base64," + Convert.ToBase64String(challenge.Png),
+            challenge.ExpiresAt,
+            CaptchaText.Alphabet));
     }
 
     /// <summary>Signs in with a code, after a good password.</summary>
@@ -500,8 +562,18 @@ public static class AuthEndpoints
 /// <param name="Username">The login name.</param>
 /// <param name="Password">The password.</param>
 /// <param name="RememberMe">Keep this browser signed in, for the configured number of days.</param>
+/// <param name="CaptchaId">The captcha picture answered, once one has been asked for.</param>
+/// <param name="CaptchaAnswer">The characters in that picture.</param>
 public sealed record LoginRequest(
-    [Required] string Username, [Required] string Password, bool RememberMe = false);
+    [Required] string Username, [Required] string Password, bool RememberMe = false,
+    string? CaptchaId = null, string? CaptchaAnswer = null);
+
+/// <summary>A captcha picture to answer (ADR-026).</summary>
+/// <param name="Id">Sent back with the answer.</param>
+/// <param name="Image">The picture, as a data URL: the characters leave the server only drawn.</param>
+/// <param name="ExpiresAt">When it can no longer be answered.</param>
+/// <param name="Alphabet">Every character a captcha may hold: the keys of the on-screen keyboard.</param>
+public sealed record CaptchaResponse(string Id, string Image, DateTimeOffset ExpiresAt, string Alphabet);
 
 /// <summary>The password was right. A code is needed next.</summary>
 /// <param name="Ticket">Carries the sign-in to the next step. Not a session.</param>
@@ -518,7 +590,9 @@ public sealed record SessionsRevoked(int Count);
 /// <param name="Status">Machine-readable status, for the client to branch on.</param>
 /// <param name="Message">What to show the person.</param>
 /// <param name="LockedUntil">Set only when the account is locked.</param>
-public sealed record LoginFailure(string Status, string Message, DateTimeOffset? LockedUntil);
+/// <param name="CaptchaRequired">The next attempt needs the captcha answered.</param>
+public sealed record LoginFailure(
+    string Status, string Message, DateTimeOffset? LockedUntil, bool CaptchaRequired = false);
 
 /// <summary>Fields a user may change about themselves.</summary>
 public sealed record ProfileRequest(

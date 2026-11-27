@@ -21,7 +21,7 @@ namespace Sqm.Api.Auth;
 public sealed partial class SessionSweeper : BackgroundService
 {
     [LoggerMessage(EventId = 1300, Level = LogLevel.Information,
-        Message = "Removed {Count} ended session(s)")]
+        Message = "Removed {Count} ended session(s) and lapsed captcha row(s)")]
     private partial void LogSwept(int count);
 
     [LoggerMessage(EventId = 1301, Level = LogLevel.Warning,
@@ -31,16 +31,18 @@ public sealed partial class SessionSweeper : BackgroundService
     private static readonly TimeSpan Interval = TimeSpan.FromHours(6);
 
     private readonly ISessionStore _sessions;
+    private readonly ICaptchaService _captcha;
     private readonly SessionSettings _options;
     private readonly ILogger<SessionSweeper> _logger;
 
     /// <summary>Creates the sweeper.</summary>
     public SessionSweeper(
-        ISessionStore sessions, IOptions<AuthOptions> auth, ILogger<SessionSweeper> logger)
+        ISessionStore sessions, ICaptchaService captcha, IOptions<AuthOptions> auth, ILogger<SessionSweeper> logger)
     {
         ArgumentNullException.ThrowIfNull(auth);
 
         _sessions = sessions;
+        _captcha = captcha;
         _options = auth.Value.Session;
         _logger = logger;
     }
@@ -57,6 +59,10 @@ public sealed partial class SessionSweeper : BackgroundService
                 var removed = await _sessions
                     .DeleteExpiredAsync(_options.RetainEndedSessionsFor, stoppingToken)
                     .ConfigureAwait(false);
+
+                // Captcha pictures nobody answered. Failures mostly go as new ones arrive; this takes
+                // the last of them after a quiet spell.
+                removed += await _captcha.SweepAsync(stoppingToken).ConfigureAwait(false);
 
                 if (removed > 0)
                 {

@@ -33,6 +33,9 @@ public sealed class AuthOptions
 
     /// <summary>How a message reaches a person: mail server, SMS gateway.</summary>
     public DeliveryOptions Delivery { get; init; } = new();
+
+    /// <summary>The Persian captcha: when it is asked for, and how long a picture lives (ADR-026).</summary>
+    public CaptchaOptions Captcha { get; init; } = new();
 }
 
 /// <summary>Argon2id parameters.</summary>

@@ -8,9 +8,21 @@
       "port": 5202
     },
     {
+      "name": "api-ipv4",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "backend/src/Sqm.Api", "--launch-profile", "http", "--", "--Api:CorsOrigins=http://localhost:5173,http://127.0.0.1:5173"],
+      "port": 5202
+    },
+    {
       "name": "frontend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
+      "port": 5173
+    },
+    {
+      "name": "frontend-ipv4",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "frontend", "--", "--host", "127.0.0.1", "--strictPort"],
       "port": 5173
     }
   ]

@@ -1,3 +1,4 @@
+import type { Ref } from 'vue'
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/vue-query'
 import { api } from './client'
 import { forgetAll } from '@/lib/session-memory'
@@ -61,8 +62,27 @@ export interface LoginFailure {
     | 'AccountDisabled'
     | 'InvalidCode'
     | 'ChallengeExpired'
+    | 'CaptchaRequired'
   message: string
   lockedUntil: string | null
+  /** The next attempt needs the captcha answered (ADR-026). */
+  captchaRequired: boolean
+}
+
+/** A captcha picture to answer (ADR-026). The characters leave the server only drawn. */
+export interface CaptchaChallenge {
+  id: string
+  /** A PNG data URL. */
+  image: string
+  expiresAt: string
+  /** Every character a captcha may hold: the keys of the on-screen keyboard. */
+  alphabet: string
+}
+
+/** The answer that goes with a sign-in or a recovery step once a captcha has been asked for. */
+export interface CaptchaAnswer {
+  captchaId?: string
+  captchaAnswer?: string
 }
 
 /** The password was right and this account has a second step. There is no session yet. */
@@ -85,6 +105,8 @@ export interface SignInOptions {
   twoStepAvailable: boolean
   rememberDays: number
   codeMinutes: number
+  /** Sign-ins from this address need the captcha now (ADR-026). */
+  captchaRequired: boolean
 }
 
 /** A channel, as the API's enum spells it in a body. */
@@ -169,7 +191,7 @@ export function useLogin() {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: (credentials: { username: string; password: string; rememberMe: boolean }) =>
+    mutationFn: (credentials: { username: string; password: string; rememberMe: boolean } & CaptchaAnswer) =>
       api.post<LoginResult>('/api/v1/auth/login', credentials),
     onSuccess: (result) => {
       // Seeded rather than invalidated: the login response already IS the current user, and
@@ -208,15 +230,34 @@ export function useSignInOptions() {
 /** Asks for a recovery code. The answer says nothing about the account, on purpose. */
 export function useStartRecovery() {
   return useMutation({
-    mutationFn: (request: { identifier: string; channel: ContactChannelName }) =>
+    mutationFn: (request: { identifier: string; channel: ContactChannelName } & CaptchaAnswer) =>
       api.post<void>('/api/v1/auth/recovery/start', request),
   })
 }
 
 export function useCompleteRecovery() {
   return useMutation({
-    mutationFn: (request: { identifier: string; code: string; newPassword: string }) =>
+    mutationFn: (request: { identifier: string; code: string; newPassword: string } & CaptchaAnswer) =>
       api.post<void>('/api/v1/auth/recovery/complete', request),
+  })
+}
+
+/**
+ * A captcha picture, fetched only while one is needed. Each picture answers once, so the page asks for
+ * a fresh one after every attempt; nothing refetches it behind the reader's back, which would swap the
+ * picture while they type.
+ */
+export function useCaptcha(needed: Ref<boolean>, theme: () => 'light' | 'dark') {
+  return useQuery({
+    queryKey: ['auth', 'captcha'],
+    queryFn: ({ signal }) =>
+      api.get<CaptchaChallenge>('/api/v1/auth/captcha', { theme: theme() }, signal),
+    enabled: needed,
+    staleTime: Infinity,
+    gcTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   })
 }
 
