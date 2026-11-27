@@ -107,6 +107,11 @@ is in PostgreSQL, not in memory as Ganjineh keeps it.
 - No configuration is needed to deploy it. `Auth:Captcha:Enabled=false` exists for test copies only.
 - Off-the-shelf OCR reads none of the pictures. A model trained on them could; the captcha raises the cost of
   guessing, and the lockout and the rate limits remain the controls that bound it.
+- **The images are published for Linux x64 only** (2026-11-27). SkiaSharp's native library ships for eighteen
+  platforms, and a publish with no runtime identifier carried all of them: 479 MB in each app, 1.5 GB for the
+  three against 99 MB. The first release with it never deployed - the department pipeline's image build was
+  killed for memory (exit 137) while kaniko snapshotted that stage. The backend Dockerfile now restores and
+  publishes for `TARGET_RID`, `linux-x64` unless a build argument says otherwise.
 
 ## How it was proved
 
