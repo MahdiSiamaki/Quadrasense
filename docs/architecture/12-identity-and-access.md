@@ -168,6 +168,13 @@ The login endpoint is additionally rate-limited to **6 attempts per minute per a
 not about guessing — the lockout handles that — it bounds the memory an unauthenticated caller can
 make the server allocate, since each attempt costs 19 MiB.
 
+**The Persian captcha** (ADR-026, MCI red line §2-3 row 3): after three failed sign-ins from an address
+or for a name within fifteen minutes, the next attempt must answer a picture of five Persian characters,
+checked *before* the password - a wrong answer never counts towards the lockout and never costs an
+Argon2 verification. Recovery asks for it after five wrong codes. Pictures and failures are kept in
+PostgreSQL as hashes (`auth.captcha_challenge`, `auth.sign_in_failure`); a picture lives ten minutes and
+is answered once.
+
 ### Getting back in, and the second step
 
 ADR-022 has the reasoning; this is what exists.
@@ -270,6 +277,7 @@ run as the owner, not as `sqm_app`.
 |---|---|---|
 | "Incorrect username or password" | Wrong password, no such account, or **deactivated** — the message is identical on purpose | Check the Users page |
 | "Too many failed attempts" | Locked. Clears itself within 15 minutes | Unlock on their detail page |
+| A "Security check" picture appears | Three failed sign-ins from their address or for their name in 15 minutes (ADR-026) | Type the characters, or use the on-screen keyboard; it stops being asked 15 minutes after the last failure |
 | Signs in, then everything is refused | A password change is pending | They must complete it; the app sends them there |
 | Signed out unexpectedly | Password changed elsewhere, deactivated, or an administrator revoked sessions | The audit log says which |
 

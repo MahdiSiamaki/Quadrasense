@@ -31,8 +31,8 @@ Five rows below cannot be closed by engineering alone. They are repeated in `REA
    the evidence for it: 26-35x faster than the alternatives on the dashboard queries, 3.4x smaller.
 2. **A captcha with Persian digits and letters** is required on the login page after three failed
    attempts (§2-3). The product is English-only by the owner's decision (CLAUDE.md). **Decided
-   2026-11-09 by the owner: the red line comes first.** The captcha is built for the release that goes
-   to MCI's infrastructure, as the one place Persian appears in the interface, and not before.
+   2026-11-09 by the owner: the red line comes first** - the one place Persian appears in the
+   interface. Built 2026-11-27, at the owner's request of 2026-11-26 (ADR-026).
 3. **Clustering, and a second site running active-active** (§2-3). Today every store is one node.
    This is the largest architecture change in the list - see `03-mci-openshift.md`, "High
    availability".
@@ -143,7 +143,7 @@ the Import Center in a browser.
 |---|---|---|---|---|
 | 1 | **A system identification document, its architecture and its traffic-flow map, approved by the security office** | `docs/architecture/` describes the system; the traffic-flow table is in `03-…` | Assemble them in the office's format | gap |
 | 2 | SMS one-time passwords: six digits, random, void after five failures, expire in ten minutes | Recovery codes follow these terms on both channels (ADR-022, `OneTimeCodes`), each proved by a test. Two-step sign-in is an authenticator app, not SMS | - | met |
-| 3 | **Captcha**: hidden at first, shown after three failed logins (five elsewhere); Persian digits and letters in several Persian fonts; at least ten patterns; resistant to OCR; with an on-screen keyboard | Login is rate-limited (six attempts a minute per address) and every attempt costs an Argon2id verification (ADR-006). **No captcha** | Decision 2 above; then a self-hosted captcha (row 4 of §1-3: nothing external) | gap |
+| 3 | **Captcha**: hidden at first, shown after three failed logins (five elsewhere); Persian digits and letters in several Persian fonts; at least ten patterns; resistant to OCR; with an on-screen keyboard | Built (ADR-026): asked for after three failed sign-ins by address or by name, and after five failed recovery codes; 17 Persian letters and 6 digits in five Persian typefaces (OFL / public domain, embedded); twelve patterns; drawn on the server; an on-screen keyboard of exactly its characters. Measured: Tesseract with its Persian model read 0 of 300 (it read 18% of the same characters drawn plainly). Self-hosted (row 4 of §1-3) | - | met |
 | 4 | Prefer CNCF-landscape software; horizontal scaling in code, service and database layers | API stateless (sessions in PostgreSQL), can run several replicas. One worker. **Each store is one node** | `03-…`, "High availability" | partly |
 | 5 | TLS 1.2 or later | The web image allows 1.2 and 1.3 only | - | met |
 | 6 | Uploads: format and size limits, renamed, stored where nothing executes and nobody else reads | Size enforced while writing (`ImportStorage:MaxFileBytes`); stored under a generated name, never the client's (`DirectoryImportFileStore`); in a volume only the API and worker mount, mode 2770. The format is judged by the parser, which quarantines what it cannot read | Mount the VM's data disk `noexec` | met |

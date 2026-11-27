@@ -78,9 +78,11 @@ Do not re-open these without asking:
   year) because every table is rebuildable from them plus the pipeline.
 - **English only, LTR, Gregorian dates.** No Persian in the product UI, no Jalali calendar - except
   where MCI's red lines require it, which so far is the captcha below.
-- **The Persian captcha is required, for the MCI release** (2026-11-09). The red lines (§2-3 row 3)
-  outrank English-only. It is built for the release that goes to MCI's infrastructure, not before:
-  until then the login keeps its lockout and rate limits (ADR-006, ADR-022).
+- **The Persian captcha is required, and built** (2026-11-09; built now at the owner's request of
+  2026-11-26, ADR-026). The red lines (§2-3 row 3) outrank English-only, and **the red lines document
+  always takes precedence**: where another system - Ganjineh, whose security mechanisms the owner asked
+  for in full - does a thing otherwise, the red line is followed. It is asked for after three failed
+  sign-ins and five failed recovery codes, on top of the lockout and rate limits (ADR-006, ADR-022).
 - **Device images are proposed, never auto-applied.** Automatic sourcing once put a photograph of
   an office building into the catalogue. Nothing reaches the live image table without a person
   approving it — see `docs/adr/ADR-011-device-image-sourcing.md`.
