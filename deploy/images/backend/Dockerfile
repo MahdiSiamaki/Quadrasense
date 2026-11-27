@@ -31,6 +31,12 @@ FROM ${SDK_IMAGE:-mcr.microsoft.com/dotnet/sdk:10.0.400} AS build
 # Empty means the SDK's default feed.
 ARG NUGET_SOURCE=
 
+# One runtime: the images run on Linux x64 and nowhere else (the department VM, MCI's OpenShift).
+# Without it every app carried SkiaSharp's native library for all eighteen platforms it ships - 479 MB
+# in each, 1.5 GB for the three against 99 MB - and kaniko's snapshot of this stage outgrew the runner's
+# memory: killed, exit 137, the pipeline of 172ee5a (2026-11-27). Another architecture is a build arg.
+ARG TARGET_RID=linux-x64
+
 WORKDIR /src
 COPY global.json ./
 COPY backend/Directory.Build.props backend/Sqm.slnx backend/
@@ -45,7 +51,7 @@ COPY backend/src/Sqm.Migrator/Sqm.Migrator.csproj             backend/src/Sqm.Mi
 # Restore on its own layer: it changes when a package does, not when a line of code does.
 RUN set -eu; \
     for p in Sqm.Api Sqm.Ingestion Sqm.Migrator; do \
-      dotnet restore "backend/src/$p/$p.csproj" ${NUGET_SOURCE:+--source "$NUGET_SOURCE"}; \
+      dotnet restore "backend/src/$p/$p.csproj" -r "$TARGET_RID" ${NUGET_SOURCE:+--source "$NUGET_SOURCE"}; \
     done
 
 COPY backend/ backend/
@@ -58,9 +64,9 @@ COPY frontend/src/features/dashboard/registry/widget-contract.json frontend/src/
 COPY frontend/src/lib/appearance-contract.json frontend/src/lib/
 
 RUN set -eu; \
-    dotnet publish backend/src/Sqm.Api/Sqm.Api.csproj             -c Release --no-restore -o /out/api      -p:UseAppHost=false; \
-    dotnet publish backend/src/Sqm.Ingestion/Sqm.Ingestion.csproj -c Release --no-restore -o /out/worker   -p:UseAppHost=false; \
-    dotnet publish backend/src/Sqm.Migrator/Sqm.Migrator.csproj   -c Release --no-restore -o /out/migrator -p:UseAppHost=false; \
+    dotnet publish backend/src/Sqm.Api/Sqm.Api.csproj             -c Release --no-restore -r "$TARGET_RID" --self-contained false -o /out/api      -p:UseAppHost=false; \
+    dotnet publish backend/src/Sqm.Ingestion/Sqm.Ingestion.csproj -c Release --no-restore -r "$TARGET_RID" --self-contained false -o /out/worker   -p:UseAppHost=false; \
+    dotnet publish backend/src/Sqm.Migrator/Sqm.Migrator.csproj   -c Release --no-restore -r "$TARGET_RID" --self-contained false -o /out/migrator -p:UseAppHost=false; \
     mkdir -p /out/migrator/db/operational /out/migrator/db/analytics; \
     cp -r db/operational/migrations /out/migrator/db/operational/; \
     cp -r db/analytics/migrations   /out/migrator/db/analytics/
