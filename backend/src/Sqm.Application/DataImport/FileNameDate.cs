@@ -71,8 +71,17 @@ public static partial class FileNameDate
 
     private const RegexOptions Options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
 
-    // A timeout on each, because a name arrives from outside: 200 ms is thousands of times what these need.
-    private const int TimeoutMs = 200;
+    /// <summary>
+    /// The longest name read. No file system keeps a longer one, and the cap is what bounds every pattern's
+    /// work: the worst name measured at this length takes 53 µs to read (2026-11-27).
+    /// </summary>
+    public const int MaxNameLength = 255;
+
+    // A backstop for a pattern that could ever stall, not the guard against a hostile name: the length cap
+    // is that. At 200 ms it fired on a busy machine - a process's first read pays 44 to 61 ms of JIT inside
+    // the match on an idle laptop - and a timeout reads as "no date", which held a real file back. Two
+    // seconds is forty times a cold read and tens of thousands of times a warm one.
+    private const int TimeoutMs = 2000;
 
     /// <summary>2026-10-17, 2026_10_17, 2026.1.7 - the same separator twice - or 20261017 with none.</summary>
     [GeneratedRegex(@"(?<!\d)(?<y>20\d{2})(?<s>[-_. ])(?<m>\d{1,2})\k<s>(?<d>\d{1,2})(?!\d)|(?<!\d)(?<y>20\d{2})(?<m>\d{2})(?<d>\d{2})(?!\d)", Options, TimeoutMs)]
@@ -113,6 +122,12 @@ public static partial class FileNameDate
 
         // An entry of an archive arrives with its folders: they are not the file's name.
         var name = fileName[(fileName.LastIndexOfAny(['/', '\\']) + 1)..];
+
+        // Longer than any file system keeps is not a file's name, and is not read.
+        if (name.Length > MaxNameLength)
+        {
+            return FileNameDateReading.Nothing;
+        }
 
         List<IReadOnlyList<DateOnly>> findings;
         try

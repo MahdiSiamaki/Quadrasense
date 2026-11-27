@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Text.RegularExpressions;
 using Sqm.Application.DataImport;
 
 namespace Sqm.Application.Tests;
@@ -149,6 +151,37 @@ public sealed class FileNameDateTests
         var reading = FileNameDate.Read(name);
 
         Assert.True(watch.ElapsedMilliseconds < 2_000, $"took {watch.ElapsedMilliseconds} ms");
-        Assert.True(reading.Kind is FileNameDateKind.Exact or FileNameDateKind.None);
+        // Longer than any file system keeps: not a file's name, so not read at all.
+        Assert.Equal(FileNameDateKind.None, reading.Kind);
+    }
+
+    [Fact]
+    public void A_name_longer_than_any_file_system_keeps_is_not_read()
+    {
+        const string dated = "_2026-10-17.csv";
+        var longest = new string('x', FileNameDate.MaxNameLength - dated.Length) + dated;
+
+        Assert.Equal(D(2026, 10, 17), FileNameDate.ExactOf(longest));
+        Assert.Equal(FileNameDateKind.None, FileNameDate.Read("x" + longest).Kind);
+
+        // An archive entry's folders are not its name, and do not count towards it.
+        Assert.Equal(D(2026, 10, 17), FileNameDate.ExactOf(new string('d', 400) + "/" + longest));
+    }
+
+    [Fact]
+    public void Every_pattern_waits_seconds_for_a_busy_machine_not_milliseconds()
+    {
+        // At 200 ms a timeout fired on a busy machine - a process's first read spends 44 to 61 ms jitting
+        // inside the match even when idle - and read as no date, which failed CI's job on 2026-11-27. The
+        // length cap bounds the work; the timeout is a backstop that load must not be able to reach.
+        var patterns = typeof(FileNameDate)
+            .GetProperties(BindingFlags.NonPublic | BindingFlags.Static)
+            .Where(p => p.PropertyType == typeof(Regex))
+            .Select(p => (p.Name, Regex: (Regex)p.GetValue(null)!))
+            .ToList();
+
+        Assert.True(patterns.Count >= 6, $"{patterns.Count} patterns found");
+        Assert.All(patterns, p => Assert.True(
+            p.Regex.MatchTimeout >= TimeSpan.FromSeconds(1), $"{p.Name} waits only {p.Regex.MatchTimeout}"));
     }
 }
