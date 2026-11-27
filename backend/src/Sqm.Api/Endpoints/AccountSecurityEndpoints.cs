@@ -90,9 +90,11 @@ public static class AccountSecurityEndpoints
 
     // ======================================================================= the sign-in page
 
-    private static SignInOptionsResponse SignInOptions(
-        IContactDelivery delivery, ITwoStepService twoStep, IOptions<AuthOptions> authOptions)
+    private static async Task<SignInOptionsResponse> SignInOptions(
+        HttpContext http, IContactDelivery delivery, ITwoStepService twoStep, CaptchaGate captcha,
+        IOptions<AuthOptions> authOptions, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(captcha);
         var auth = authOptions.Value;
 
         return new SignInOptionsResponse(
@@ -100,19 +102,32 @@ public static class AccountSecurityEndpoints
             delivery.IsAvailable(ContactChannel.Sms),
             twoStep.IsAvailable,
             (int)Math.Ceiling(auth.Session.RememberedLifetime.TotalDays),
-            (int)Math.Ceiling(auth.Recovery.CodeLifetime.TotalMinutes));
+            (int)Math.Ceiling(auth.Recovery.CodeLifetime.TotalMinutes),
+            // From this address only: the page does not know the name yet. A name's own failures ask
+            // for the captcha on the first attempt that names it.
+            await captcha.RequiredAsync(CaptchaScope.Login, http, username: null, ct).ConfigureAwait(false));
     }
+
+    /// <summary>The refusal when a captcha was needed and not answered.</summary>
+    private static IResult CaptchaProblem(CaptchaVerdict verdict) =>
+        Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["captcha"] = [verdict == CaptchaVerdict.Missing
+                ? "Type the characters in the picture."
+                : "Those characters did not match the picture. Try the new one."],
+        });
 
     /// <summary>Queues the request and answers.</summary>
     /// <remarks>
     /// Nothing about any account is looked at here, on purpose: a response that does the same
     /// work for everyone cannot be timed. The queue being full is not reported either.
     /// </remarks>
-    private static IResult StartRecovery(
+    private static async Task<IResult> StartRecovery(
         RecoveryStartRequest request, HttpContext http, IAccountOutbox outbox,
-        IContactDelivery delivery)
+        IContactDelivery delivery, CaptchaGate captcha, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(captcha);
 
         var identifier = request.Identifier?.Trim();
 
@@ -134,6 +149,17 @@ public static class AccountSecurityEndpoints
             });
         }
 
+        // After five wrong codes from here or for this name, a new code costs a captcha too: the
+        // red line's "five elsewhere". The same lookup for every identifier, so it times like any other.
+        var verdict = await captcha
+            .CheckAsync(CaptchaScope.Recovery, http, identifier, request.CaptchaId, request.CaptchaAnswer, ct)
+            .ConfigureAwait(false);
+
+        if (verdict is CaptchaVerdict.Missing or CaptchaVerdict.Wrong)
+        {
+            return CaptchaProblem(verdict);
+        }
+
         outbox.TryEnqueue(new RecoveryCodeWork(identifier, channel, CurrentUser.Context(http)));
 
         return Results.Accepted();
@@ -141,9 +167,10 @@ public static class AccountSecurityEndpoints
 
     private static async Task<IResult> CompleteRecoveryAsync(
         RecoveryCompleteRequest request, HttpContext http, IAccountRecovery recovery,
-        CancellationToken ct)
+        CaptchaGate captcha, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(captcha);
 
         if (string.IsNullOrWhiteSpace(request.Identifier)
             || string.IsNullOrWhiteSpace(request.Code)
@@ -155,18 +182,42 @@ public static class AccountSecurityEndpoints
             });
         }
 
+        var identifier = request.Identifier.Trim();
+
+        var verdict = await captcha
+            .CheckAsync(CaptchaScope.Recovery, http, identifier, request.CaptchaId, request.CaptchaAnswer, ct)
+            .ConfigureAwait(false);
+
+        if (verdict is CaptchaVerdict.Missing or CaptchaVerdict.Wrong)
+        {
+            return CaptchaProblem(verdict);
+        }
+
         try
         {
             var done = await recovery.CompleteAsync(
                 request.Identifier, request.Code, request.NewPassword, CurrentUser.Context(http), ct)
                 .ConfigureAwait(false);
 
-            return done
-                ? Results.NoContent()
-                : Results.ValidationProblem(new Dictionary<string, string[]>
-                {
-                    ["code"] = ["That code is not right, or it has expired. Ask for a new one."],
-                });
+            if (done)
+            {
+                await captcha.SucceededAsync(CaptchaScope.Recovery, identifier, ct).ConfigureAwait(false);
+                return Results.NoContent();
+            }
+
+            await captcha.FailedAsync(CaptchaScope.Recovery, http, identifier, ct).ConfigureAwait(false);
+
+            var errors = new Dictionary<string, string[]>
+            {
+                ["code"] = ["That code is not right, or it has expired. Ask for a new one."],
+            };
+
+            if (await captcha.RequiredAsync(CaptchaScope.Recovery, http, identifier, ct).ConfigureAwait(false))
+            {
+                errors["captcha"] = ["Type the characters in the picture as well."];
+            }
+
+            return Results.ValidationProblem(errors);
         }
         catch (PasswordPolicyException ex)
         {
@@ -387,18 +438,22 @@ public static class AccountSecurityEndpoints
 /// <param name="TwoStepAvailable">Authenticator sign-in can be set up.</param>
 /// <param name="RememberDays">How long "remember me" lasts.</param>
 /// <param name="CodeMinutes">How long a code works.</param>
+/// <param name="CaptchaRequired">Sign-ins from this address need the captcha now (ADR-026).</param>
 public sealed record SignInOptionsResponse(
     bool RecoverByEmail,
     bool RecoverBySms,
     bool TwoStepAvailable,
     int RememberDays,
-    int CodeMinutes);
+    int CodeMinutes,
+    bool CaptchaRequired);
 
-/// <summary>A request for a recovery code.</summary>
-public sealed record RecoveryStartRequest(string? Identifier, ContactChannel? Channel);
+/// <summary>A request for a recovery code; the captcha once five codes have failed (ADR-026).</summary>
+public sealed record RecoveryStartRequest(
+    string? Identifier, ContactChannel? Channel, string? CaptchaId = null, string? CaptchaAnswer = null);
 
-/// <summary>A code and the password it allows.</summary>
-public sealed record RecoveryCompleteRequest(string? Identifier, string? Code, string? NewPassword);
+/// <summary>A code and the password it allows; the captcha once five codes have failed (ADR-026).</summary>
+public sealed record RecoveryCompleteRequest(
+    string? Identifier, string? Code, string? NewPassword, string? CaptchaId = null, string? CaptchaAnswer = null);
 
 /// <summary>The password, asked again before sending a code.</summary>
 public sealed record ContactCodeRequest(string? CurrentPassword);

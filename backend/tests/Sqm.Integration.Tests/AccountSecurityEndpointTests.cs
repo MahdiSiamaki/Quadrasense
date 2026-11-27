@@ -62,6 +62,11 @@ public sealed class AccountSecurityEndpointTests
         _factory.WithWebHostBuilder(host =>
         {
             host.UseSetting("Auth:TwoStep:SecretKey", key ?? Key);
+
+            // The captcha has tests of its own (CaptchaEndpointTests). Here it would turn the sixth wrong
+            // code into a captcha question, and it reads the database, which these routes otherwise need
+            // only for what they test.
+            host.UseSetting("Auth:Captcha:Enabled", "false");
             host.ConfigureTestServices(services =>
                 services.AddSingleton<IContactDelivery>(_delivery));
         });

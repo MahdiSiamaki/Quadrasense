@@ -233,6 +233,12 @@ builder.Services.AddSingleton<ITwoStepService, PostgresTwoStepService>();
 builder.Services.AddSingleton<IAppearanceStore, PostgresAppearanceStore>();
 builder.Services.AddHostedService<AccountOutboxDispatcher>();
 
+// The Persian captcha (ADR-026): MCI's red line asks for it after three failed sign-ins. The renderer
+// loads and checks its typefaces once; a face missing a character stops the API here, at start.
+builder.Services.AddSingleton<ICaptchaRenderer, Sqm.Infrastructure.Identity.Captcha.SkiaCaptchaRenderer>();
+builder.Services.AddSingleton<ICaptchaService, Sqm.Infrastructure.Identity.Captcha.PostgresCaptchaService>();
+builder.Services.AddSingleton<CaptchaGate>();
+
 // The integration API (ADR-024): registered systems, their tokens, CRM's declared events, PI's event feed
 // and each day's binding changes. PostgreSQL holds the first four; the changes are read from ClickHouse.
 builder.Services.Configure<Sqm.Application.Integration.IntegrationOptions>(
@@ -295,6 +301,10 @@ builder.Services.AddRateLimiter(o =>
             }));
 
     PerAddress(AuthEndpoints.LoginRateLimiter, 6);
+
+    // A picture costs a few milliseconds to draw and a row that lives ten minutes. A person needs one
+    // per attempt and the odd "new picture"; twenty a minute is plenty, and bounds what a script costs.
+    PerAddress(AuthEndpoints.CaptchaRateLimiter, 20);
     PerAddress(AccountSecurityEndpoints.RecoveryRateLimiter, 6);
     PerAddress(AccountSecurityEndpoints.ConfirmRateLimiter, 12);
 

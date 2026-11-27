@@ -88,13 +88,17 @@ public interface ICaptchaService
     Task ForgetAsync(CaptchaScope scope, string? username, CancellationToken ct);
 
     /// <summary>A new picture, with its answer kept on the server.</summary>
-    Task<CaptchaChallenge> IssueAsync(string? address, CaptchaTheme theme, CancellationToken ct);
+    Task<CaptchaChallenge> IssueAsync(CaptchaTheme theme, CancellationToken ct);
 
     /// <summary>
     /// Whether <paramref name="answer"/> is the challenge's answer. Either way the challenge is used up:
     /// each picture is answered once.
     /// </summary>
     Task<bool> RedeemAsync(string? id, string? answer, CancellationToken ct);
+
+    /// <summary>Removes pictures that can no longer be answered and failures that no longer count.</summary>
+    /// <returns>How many rows went.</returns>
+    Task<int> SweepAsync(CancellationToken ct);
 }
 
 /// <summary>The characters a captcha is made of, how they are chosen, and how an answer is read.</summary>
@@ -177,19 +181,19 @@ public static class CaptchaText
             switch (c)
             {
                 case >= '0' and <= '9':
-                    normal.Append((char)('۰' + (c - '0')));
+                    normal.Append((char)('\u06F0' + (c - '0')));
                     break;
-                case >= '٠' and <= '٩':
-                    normal.Append((char)('۰' + (c - '٠')));
+                case >= '\u0660' and <= '\u0669':
+                    normal.Append((char)('\u06F0' + (c - '\u0660')));
                     break;
-                case 'ي' or 'ى':
-                    normal.Append('ی');
+                case '\u064A' or '\u0649':
+                    normal.Append('\u06CC');
                     break;
-                case 'ك':
-                    normal.Append('ک');
+                case '\u0643':
+                    normal.Append('\u06A9');
                     break;
-                case '‌' or '‍' or 'ـ' or '‎' or '‏'
-                    or (>= '‪' and <= '‮') or (>= '⁦' and <= '⁩'):
+                case '\u200C' or '\u200D' or '\u0640' or '\u200E' or '\u200F'
+                    or (>= '\u202A' and <= '\u202E') or (>= '\u2066' and <= '\u2069'):
                     break;
                 default:
                     if (!char.IsWhiteSpace(c))
