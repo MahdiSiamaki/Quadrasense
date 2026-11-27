@@ -209,6 +209,30 @@ is refused, 4 when a file in it is stored and waits.
 - A damaged ZIP or a gzip cut short is refused at the door. Before, one would have imported.
 - One new dependency, on one path.
 
+
+## Amendment, 2026-11-27: a name's date under load
+
+**What happened.** Every pattern `FileNameDate` reads with ran under a 200 ms timeout, and a timeout reads as
+"no date in the name". On 2026-11-27 CI's backend job, reproduced in its SDK container (two processors, every
+test project at once), failed `DailyBusinessDateTests` on `subs_13Jun2026.csv`: no date. Alone it passed three
+runs of three, and on Windows.
+
+**Measured** (laptop, idle; Release): a process's **first read takes 44 to 61 ms** - the generated matchers are
+jitted inside the timed match; a warm read of a real name 5 to 19 µs; the worst name of twelve hostile shapes
+**53 µs at 255 characters**, 2.3 ms at 10,000 and 16 ms at 100,000. The patterns have no unbounded or nested
+quantifier, so the work grows with the length and no more: the timeout guarded nothing they can do, and fired
+only when a busy machine stalled a cold read. In production that holds a real daily file back for a person to
+date; in the pipeline it fails the test stage and stops a deploy.
+
+**Decided.** A name longer than **255 characters** - longer than any file system keeps - is not read, which bounds
+every read near 53 µs; an archive entry's folders do not count. The timeout stays as a backstop for a pattern
+that could ever stall, at **2 seconds**: forty times a cold read, tens of thousands of times a warm one.
+
+**Proved.** With the timeout set to 1 ms the failure is certain - real dates (`export_202610172359.csv`,
+`subs_17102026.csv`) read as none - which is the mechanism CI met by chance. Two new tests: a 255-character name
+is read and a 256-character one is not, and every pattern waits at least a second; removing the cap and putting
+200 ms back each fail them.
+
 ## Where it is
 
 `FileNameDate`, `FileDate`, `ImportIntake` (`Sqm.Application/DataImport`); `FileSignature`,
