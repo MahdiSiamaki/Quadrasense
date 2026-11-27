@@ -1,18 +1,22 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import Button from '@/design-system/Button.vue'
 import SegmentedControl from '@/design-system/SegmentedControl.vue'
 import TextField from '@/design-system/TextField.vue'
 import AuthShell from './AuthShell.vue'
+import CaptchaField from './CaptchaField.vue'
 import FormMessage from './FormMessage.vue'
 import {
+  useCaptcha,
   useCompleteRecovery,
   useSignInOptions,
   useStartRecovery,
+  type CaptchaAnswer,
   type ContactChannelName,
 } from '@/api/auth'
 import { ApiError } from '@/api/client'
+import { useTheme } from '@/lib/theme'
 
 /**
  * Getting back into an account.
@@ -53,7 +57,42 @@ const channel = computed(() => chosen.value ?? channels.value[0]?.value ?? 'Emai
 
 const minutes = computed(() => options.data.value?.codeMinutes ?? 10)
 
-const sendFailure = computed(() => describe(start.error.value))
+/*
+  The Persian captcha, once five codes have failed from here or for this name (ADR-026; the red line's
+  "five elsewhere"). The server names it among a step's errors; from then on it stays.
+*/
+const captchaAsked = ref(false)
+const answer = ref('')
+const { isDark } = useTheme()
+const captcha = useCaptcha(captchaAsked, () => (isDark.value ? 'dark' : 'light'))
+
+function captchaMessage(error: unknown): string | null {
+  if (!(error instanceof ApiError)) return null
+  return error.fieldErrors.find((f) => f.field === 'captcha')?.message ?? null
+}
+
+const startCaptcha = computed(() => captchaMessage(start.error.value))
+const completeCaptcha = computed(() => captchaMessage(complete.error.value))
+
+watch([startCaptcha, completeCaptcha], ([sending, completing]) => {
+  if (sending || completing) captchaAsked.value = true
+})
+
+/** The answer to send, when a picture is showing. */
+function withCaptcha(): CaptchaAnswer {
+  const id = captchaAsked.value ? captcha.data.value?.id : undefined
+  return id ? { captchaId: id, captchaAnswer: answer.value.trim() } : {}
+}
+
+/** A picture answers once, whatever the outcome; the next step needs another. */
+function newPicture() {
+  answer.value = ''
+  void captcha.refetch()
+}
+
+const answered = computed(() => !captchaAsked.value || answer.value.trim().length > 0)
+
+const sendFailure = computed(() => startCaptcha.value ?? describe(start.error.value))
 
 const fieldErrors = computed(() => {
   const error = complete.error.value
@@ -82,7 +121,8 @@ const canComplete = computed(
   () =>
     code.value.replace(/\s/g, '').length === 6 &&
     password.value.length >= MINIMUM_LENGTH &&
-    password.value === confirm.value,
+    password.value === confirm.value &&
+    answered.value,
 )
 
 // ------------------------------------------------------------------ asking again
@@ -109,12 +149,16 @@ onBeforeUnmount(() => {
 async function send() {
   if (!identifier.value.trim()) return
 
+  const picture = withCaptcha()
+
   try {
-    await start.mutateAsync({ identifier: identifier.value.trim(), channel: channel.value })
+    await start.mutateAsync({ identifier: identifier.value.trim(), channel: channel.value, ...picture })
   } catch {
+    if (picture.captchaId) newPicture()
     return
   }
 
+  if (picture.captchaId) newPicture()
   startWaiting()
 
   if (stage.value === 'identify') stage.value = 'code'
@@ -123,13 +167,17 @@ async function send() {
 async function submit() {
   if (!canComplete.value) return
 
+  const picture = withCaptcha()
+
   try {
     await complete.mutateAsync({
       identifier: identifier.value.trim(),
       code: code.value,
       newPassword: password.value,
+      ...picture,
     })
   } catch {
+    if (picture.captchaId) newPicture()
     return
   }
 
@@ -190,6 +238,16 @@ async function submit() {
           />
         </div>
 
+        <CaptchaField
+          v-if="captchaAsked"
+          v-model="answer"
+          :image="captcha.data.value?.image ?? null"
+          :alphabet="captcha.data.value?.alphabet ?? ''"
+          :loading="captcha.isFetching.value"
+          :disabled="start.isPending.value"
+          @refresh="newPicture"
+        />
+
         <FormMessage v-if="sendFailure" tone="warning">{{ sendFailure }}</FormMessage>
         <FormMessage v-else-if="options.isError.value" tone="warning">
           Could not reach the server. Check your connection and try again.
@@ -201,7 +259,7 @@ async function submit() {
           size="lg"
           block
           :pending="start.isPending.value"
-          :disabled="!identifier.trim() || !options.isSuccess.value"
+          :disabled="!identifier.trim() || !options.isSuccess.value || !answered"
         >
           Send code
         </Button>
@@ -263,7 +321,18 @@ async function submit() {
           :disabled="complete.isPending.value"
         />
 
-        <FormMessage v-if="completeFailure" tone="warning">{{ completeFailure }}</FormMessage>
+        <CaptchaField
+          v-if="captchaAsked"
+          v-model="answer"
+          :image="captcha.data.value?.image ?? null"
+          :alphabet="captcha.data.value?.alphabet ?? ''"
+          :loading="captcha.isFetching.value"
+          :disabled="complete.isPending.value"
+          @refresh="newPicture"
+        />
+
+        <FormMessage v-if="completeCaptcha" tone="warning">{{ completeCaptcha }}</FormMessage>
+        <FormMessage v-else-if="completeFailure" tone="warning">{{ completeFailure }}</FormMessage>
 
         <Button
           type="submit"

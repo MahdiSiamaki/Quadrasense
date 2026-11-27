@@ -157,6 +157,88 @@ describe('the sign-in page', () => {
   })
 })
 
+describe('the captcha', () => {
+  const CAPTCHA = '/api/v1/auth/captcha'
+  const picture = (id: string) => ({
+    status: 200,
+    body: { id, image: `data:image/png;base64,${id}`, expiresAt: new Date(Date.now() + 600_000).toISOString(), alphabet: 'بتج۲۳' },
+  })
+  const refusal = (captchaRequired: boolean) => ({
+    status: 401,
+    body: { status: 'InvalidCredentials', message: 'Incorrect username or password.', lockedUntil: null, captchaRequired },
+  })
+
+  it('is hidden at first', async () => {
+    fakeApi({ [OPTIONS_PATH]: { status: 200, body: OPTIONS } })
+    const { wrapper } = await mountPage(LoginPage)
+
+    expect(wrapper.find('fieldset').exists()).toBe(false)
+  })
+
+  it('stays hidden after a refusal that does not ask for it', async () => {
+    fakeApi({ [OPTIONS_PATH]: { status: 200, body: OPTIONS }, [LOGIN]: refusal(false) })
+    const { wrapper } = await mountPage(LoginPage)
+
+    await signIn(wrapper)
+
+    expect(wrapper.find('fieldset').exists()).toBe(false)
+  })
+
+  it('appears with a picture and its keyboard when the refusal that made three asks for it', async () => {
+    const api = fakeApi({ [OPTIONS_PATH]: { status: 200, body: OPTIONS }, [LOGIN]: refusal(true), [CAPTCHA]: picture('c1') })
+    const { wrapper } = await mountPage(LoginPage)
+
+    await signIn(wrapper)
+
+    expect(wrapper.get('fieldset legend').text()).toBe('Security check')
+    expect(wrapper.get('fieldset img').attributes('src')).toBe('data:image/png;base64,c1')
+    expect(wrapper.findAll('[role="group"] button')).toHaveLength(6)
+    expect(api.sent.filter((s) => s.path === CAPTCHA)).toHaveLength(1)
+  })
+
+  it('appears at once when this address already needs it', async () => {
+    fakeApi({ [OPTIONS_PATH]: { status: 200, body: { ...OPTIONS, captchaRequired: true } }, [CAPTCHA]: picture('c1') })
+    const { wrapper } = await mountPage(LoginPage)
+    await settle()
+
+    expect(wrapper.get('fieldset img').attributes('src')).toBe('data:image/png;base64,c1')
+  })
+
+  it('keeps "Sign in" waiting until the characters are typed', async () => {
+    fakeApi({ [OPTIONS_PATH]: { status: 200, body: { ...OPTIONS, captchaRequired: true } }, [CAPTCHA]: picture('c1') })
+    const { wrapper } = await mountPage(LoginPage)
+    await settle()
+
+    await wrapper.find('input[autocomplete="username"]').setValue('a.person')
+    await wrapper.find('input[autocomplete="current-password"]').setValue('a-password')
+    const button = () => wrapper.findAll('button').find((b) => b.text() === 'Sign in')!
+
+    expect(button().attributes('disabled')).toBeDefined()
+
+    await wrapper.findAll('[role="group"] button')[0]!.trigger('click')
+    expect(button().attributes('disabled')).toBeUndefined()
+  })
+
+  it("sends the answer with the picture's id, then shows a new picture with the answer cleared", async () => {
+    const api = fakeApi({
+      [OPTIONS_PATH]: { status: 200, body: { ...OPTIONS, captchaRequired: true } },
+      [CAPTCHA]: [picture('c1'), picture('c2')],
+      [LOGIN]: refusal(true),
+    })
+    const { wrapper } = await mountPage(LoginPage)
+    await settle()
+
+    const keys = wrapper.findAll('[role="group"] button')
+    await keys[0]!.trigger('click')
+    await keys[3]!.trigger('click')
+    await signIn(wrapper)
+
+    expect(api.bodyOf(LOGIN)).toMatchObject({ captchaId: 'c1', captchaAnswer: 'ب۲' })
+    expect(wrapper.get('fieldset img').attributes('src')).toBe('data:image/png;base64,c2')
+    expect(wrapper.get<HTMLInputElement>('fieldset input').element.value).toBe('')
+  })
+})
+
 describe('the second step', () => {
   function needsCode(extra: Record<string, unknown> = {}) {
     return fakeApi({

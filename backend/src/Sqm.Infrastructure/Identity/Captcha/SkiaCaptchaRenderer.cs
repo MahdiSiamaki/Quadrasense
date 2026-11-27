@@ -12,7 +12,7 @@ namespace Sqm.Infrastructure.Identity.Captcha;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Drawn at twice the size it is shown (260 x 84 CSS pixels), so it stays sharp on a high-density screen.
+/// Drawn at 520 x 168 and shown at 312 x 101 CSS pixels, so it stays sharp on a high-density screen.
 /// </para>
 /// <para>
 /// Characters are drawn one at a time in their isolated forms, so no shaping engine is needed: Skia maps

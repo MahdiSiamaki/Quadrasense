@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Button from '@/design-system/Button.vue'
 import TextField from '@/design-system/TextField.vue'
 import AuthShell from './AuthShell.vue'
+import CaptchaField from './CaptchaField.vue'
 import FormMessage from './FormMessage.vue'
 import SecondStepForm from './SecondStepForm.vue'
-import { isSecondStep, useLogin, useSignInOptions, type LoginFailure } from '@/api/auth'
+import { isSecondStep, useCaptcha, useLogin, useSignInOptions, type LoginFailure } from '@/api/auth'
 import { ApiError } from '@/api/client'
 import { formatRelative } from '@/lib/format'
+import { useTheme } from '@/lib/theme'
 
 /**
  * Sign in.
@@ -64,6 +66,31 @@ const lockedUntil = computed(() =>
     : null,
 )
 
+/*
+  The Persian captcha (ADR-026; MCI red line 2-3 row 3): hidden at first, asked for once the server says
+  so - before the first attempt if this address has failed three times lately, or in the refusal that
+  made three. Once asked, it stays for the rest of the visit: the server decides each attempt, and an
+  answer it did not need costs nothing.
+*/
+const captchaAsked = ref(false)
+const answer = ref('')
+const { isDark } = useTheme()
+const captcha = useCaptcha(captchaAsked, () => (isDark.value ? 'dark' : 'light'))
+
+watch(
+  [() => options.data.value?.captchaRequired, () => failure.value?.captchaRequired],
+  ([byAddress, byRefusal]) => {
+    if (byAddress === true || byRefusal === true) captchaAsked.value = true
+  },
+  { immediate: true },
+)
+
+/** Each picture answers once: after an attempt that sent one, the next attempt needs another. */
+function newPicture() {
+  answer.value = ''
+  void captcha.refetch()
+}
+
 const form = ref<HTMLFormElement | null>(null)
 
 /** Back to wherever they were headed, so an expiry does not also lose the page someone had open. */
@@ -79,11 +106,14 @@ function focusPassword() {
 async function submit() {
   if (!username.value.trim() || !password.value) return
 
+  const picture = captchaAsked.value ? captcha.data.value?.id : undefined
+
   try {
     const result = await login.mutateAsync({
       username: username.value.trim(),
       password: password.value,
       rememberMe: remember.value,
+      ...(picture ? { captchaId: picture, captchaAnswer: answer.value.trim() } : {}),
     })
     password.value = ''
 
@@ -96,6 +126,8 @@ async function submit() {
   } catch {
     // Rendered from login.error; a rejected mutation is not an unhandled failure here.
     password.value = ''
+    // The picture sent is used up. One asked for only now arrives by itself, as the query wakes.
+    if (picture) newPicture()
     // Back into the field that was cleared. The fields were disabled during the request, and a
     // focused element that becomes disabled hands focus to the page body: the next keystroke went
     // nowhere. Once they are enabled again, the password field takes it.
@@ -183,6 +215,16 @@ function recover() {
           </button>
         </div>
 
+        <CaptchaField
+          v-if="captchaAsked"
+          v-model="answer"
+          :image="captcha.data.value?.image ?? null"
+          :alphabet="captcha.data.value?.alphabet ?? ''"
+          :loading="captcha.isFetching.value"
+          :disabled="login.isPending.value"
+          @refresh="newPicture"
+        />
+
         <!--
           One message, in the place the eye already is. Colour is not the only signal: the
           text says what happened, and a locked account says when it frees up.
@@ -202,7 +244,7 @@ function recover() {
           size="lg"
           block
           :pending="login.isPending.value"
-          :disabled="!username.trim() || !password"
+          :disabled="!username.trim() || !password || (captchaAsked && !answer.trim())"
         >
           Sign in
         </Button>
